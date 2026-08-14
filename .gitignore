@@ -1,4 +1,4 @@
-# --- Secrets : jamais, sous aucun pretexte -------------------------------
+# --- Secrets: never, under any circumstances -------------------------------
 .env
 .env.*
 !.env.example
@@ -19,10 +19,13 @@ frontend/dist/
 frontend/.vite/
 npm-debug.log*
 
-# --- Fichiers temporaires du moteur d'analyse -----------------------------
+# --- Analysis engine temp directories ---------------------------------------
 analyse_qualite_*/
 
-# --- Systeme et editeurs --------------------------------------------------
+# --- Local tool configuration ---------------------------------------------
+.claude/settings.local.json
+
+# --- OS and editors ----------------------------------------------------------
 .DS_Store
 Thumbs.db
 .vscode/
