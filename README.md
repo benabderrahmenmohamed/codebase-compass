@@ -1,5 +1,8 @@
 # Codebase Compass
 
+[![CI](https://github.com/benabderrahmenmohamed/codebase-compass/actions/workflows/ci.yml/badge.svg)](https://github.com/benabderrahmenmohamed/codebase-compass/actions/workflows/ci.yml)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+
 **Understand a codebase you didn't write.**
 
 Most code analysis tools answer *"is this code good?"*. This one answers a harder and
@@ -141,8 +144,12 @@ App: <http://localhost:5173>
 
 ```bash
 cd backend
-venv/Scripts/python.exe -m pytest -q
+pytest -q          # 275 tests, offline, no API key needed
 ```
+
+The suite runs with no key and no network: an autouse fixture blanks
+`ANTHROPIC_API_KEY` and blocks every non-loopback socket, so a test that
+tried to reach the real API would fail loudly rather than quietly bill you.
 
 ---
 
