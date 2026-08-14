@@ -1,0 +1,30 @@
+# --- Secrets : jamais, sous aucun pretexte -------------------------------
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# --- Python ---------------------------------------------------------------
+backend/venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Node / frontend ------------------------------------------------------
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# --- Fichiers temporaires du moteur d'analyse -----------------------------
+analyse_qualite_*/
+
+# --- Systeme et editeurs --------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

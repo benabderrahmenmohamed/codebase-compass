@@ -1,0 +1,214 @@
+# Our own Semgrep rules.
+#
+# Why write our own instead of using the public registry:
+#   1. speed    — a small local pack loads in ~0.6s, the registry in ~3s;
+#   2. licence  — the public rules carry their own licence, these are ours;
+#   3. control  — each rule carries ITS category and ITS penalty in metadata,
+#      so scoring reads data instead of guessing.
+#
+# Semgrep reasons about the STRUCTURE of code (its syntax tree), not its text:
+# an `eval(x)` written inside a comment or a string is not reported. That is
+# the difference with a purely textual linter.
+#
+# The metadata fields we own:
+#   category   : one of the five scored categories
+#   severity   : low | medium | high | critical  (sent to the frontend)
+#   penalty    : points deducted (see scoring.py)
+#   suggestion : the fix offered to the user
+
+rules:
+  # ------------------------------------------------------------ SECURITY
+
+  - id: dynamic-execution
+    languages: [python, javascript, typescript]
+    severity: ERROR
+    message: "Dynamically built code is executed (eval/exec)."
+    metadata:
+      category: security
+      severity: critical
+      penalty: 10
+      cwe: "CWE-95"
+      suggestion: "Replace with an explicit conversion or a list of allowed values."
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+
+  - id: shell-command
+    languages: [python]
+    severity: ERROR
+    message: "System command run through a shell: command injection is possible."
+    metadata:
+      category: security
+      severity: critical
+      penalty: 10
+      cwe: "CWE-78"
+      suggestion: "Pass arguments as a list and leave shell=False (the default)."
+    pattern-either:
+      - pattern: subprocess.$FUNCTION(..., shell=True, ...)
+      - pattern: os.system(...)
+      - pattern: os.popen(...)
+
+  # Taint mode: Semgrep follows the value from where it is BUILT to where it
+  # is EXECUTED. A plain text search cannot do this — it flagged a SQL string
+  # written inside a documentation example, and that false positive became
+  # the most severe finding in the whole report.
+  #
+  # Only a query that actually reaches a database call is reported, so a
+  # concatenated string that is merely stored or printed is correctly ignored.
+  - id: sql-string-concat
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: "SQL query built by string concatenation: SQL injection is possible."
+    metadata:
+      category: security
+      severity: critical
+      penalty: 10
+      cwe: "CWE-89"
+      suggestion: "Use a parameterised query: execute(sql, (value,))."
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $SQL + $X
+              - pattern: f"..."
+              - pattern: $SQL % $X
+              - pattern: $SQL.format(...)
+          - metavariable-regex:
+              metavariable: $SQL
+              regex: (?is).*(select |insert into|update |delete from).*
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $OBJ.execute(...)
+              - pattern: $OBJ.executemany(...)
+              - pattern: $OBJ.executescript(...)
+              - pattern: $OBJ.raw(...)
+
+  - id: hardcoded-secret
+    languages: [python]
+    severity: WARNING
+    message: "Secret written in plain text in the source code."
+    metadata:
+      category: security
+      severity: high
+      penalty: 7
+      cwe: "CWE-798"
+      suggestion: "Read the value from an environment variable (an unversioned .env file)."
+    patterns:
+      - pattern: $NAME = "..."
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: (?i).*(password|passwd|secret|api_?key|token|credential).*
+
+  - id: hardcoded-secret-js
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Secret written in plain text in the source code."
+    metadata:
+      category: security
+      severity: high
+      penalty: 7
+      cwe: "CWE-798"
+      suggestion: "Read the value from an environment variable."
+    patterns:
+      - pattern-either:
+          - pattern: const $NAME = "..."
+          - pattern: let $NAME = "..."
+          - pattern: var $NAME = "..."
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: (?i).*(password|secret|api_?key|token|credential).*
+
+  - id: weak-hash
+    languages: [python]
+    severity: WARNING
+    message: "Obsolete hashing algorithm (MD5 or SHA-1)."
+    metadata:
+      category: security
+      severity: high
+      penalty: 7
+      cwe: "CWE-327"
+      suggestion: "For a password use bcrypt or argon2; otherwise SHA-256."
+    pattern-either:
+      - pattern: hashlib.md5(...)
+      - pattern: hashlib.sha1(...)
+
+  - id: tls-verification-disabled
+    languages: [python]
+    severity: WARNING
+    message: "TLS certificate verification is disabled."
+    metadata:
+      category: security
+      severity: high
+      penalty: 7
+      cwe: "CWE-295"
+      suggestion: "Keep verify=True and install the root certificate if needed."
+    pattern: requests.$METHOD(..., verify=False, ...)
+
+  # ------------------------------------------------------ BEST PRACTICES
+
+  - id: broad-exception-catch
+    languages: [python]
+    severity: WARNING
+    message: "Every error is caught without distinction."
+    metadata:
+      category: best_practices
+      severity: medium
+      penalty: 4
+      suggestion: "Catch the expected error type so real bugs are not hidden."
+    pattern-either:
+      - pattern: |
+          try:
+              ...
+          except:
+              ...
+      - pattern: |
+          try:
+              ...
+          except Exception:
+              ...
+
+  - id: mutable-default-argument
+    languages: [python]
+    severity: WARNING
+    message: "Mutable default value: it is shared between every call."
+    metadata:
+      category: best_practices
+      severity: medium
+      penalty: 4
+      suggestion: "Default to None, then build the list or dict inside the function."
+    # Block scalars are required: a pattern containing ": " would break YAML.
+    pattern-either:
+      - pattern: |
+          def $F(..., $A=[], ...):
+              ...
+      - pattern: |
+          def $F(..., $A={}, ...):
+              ...
+
+  - id: comparison-to-none
+    languages: [python]
+    severity: INFO
+    message: "Comparison to None using == instead of is."
+    metadata:
+      category: best_practices
+      severity: low
+      penalty: 2
+      suggestion: "Write 'is None' / 'is not None': identity is what is being tested."
+    pattern-either:
+      - pattern: $X == None
+      - pattern: $X != None
+
+  - id: debug-trace
+    languages: [python, javascript, typescript]
+    severity: INFO
+    message: "Debug trace left in the code."
+    metadata:
+      category: best_practices
+      severity: low
+      penalty: 2
+      suggestion: "Use a logger: configurable and switchable off in production."
+    pattern-either:
+      - pattern: print(...)
+      - pattern: console.log(...)
+      - pattern: console.debug(...)

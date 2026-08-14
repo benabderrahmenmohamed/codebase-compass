@@ -1,0 +1,478 @@
+/* Colours come from the variables defined in index.css: this inherits
+   both light and dark mode for free. */
+
+.app {
+  /* index.css centres all text: we go back to left for a form. */
+  text-align: left;
+  padding: 24px 32px 64px;
+
+  @media (max-width: 1024px) {
+    padding: 16px 20px 48px;
+  }
+}
+
+.masthead h1 {
+  font-size: 32px;
+  letter-spacing: -0.5px;
+  margin: 16px 0 8px;
+}
+
+/* ---------- form ---------- */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 32px;
+}
+
+.form label {
+  font-size: 15px;
+  color: var(--text-h);
+  margin-top: 8px;
+}
+
+.form textarea,
+.form input {
+  font: 15px/150% var(--mono);
+  color: var(--text-h);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.form textarea:focus,
+.form input:focus {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 1px;
+}
+
+.form button {
+  align-self: flex-start;
+  margin-top: 20px;
+  font: 500 16px var(--sans);
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  padding: 12px 24px;
+  cursor: pointer;
+}
+
+.form button:disabled {
+  /* A greyed button says "not now" without hiding the action. */
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- error and result ---------- */
+
+.error {
+  margin-top: 24px;
+  padding: 12px 16px;
+  border: 1px solid #e5484d;
+  border-radius: 6px;
+  background: rgba(229, 72, 77, 0.1);
+  color: #e5484d;
+}
+
+/* ---------- report ---------- */
+
+.report {
+  margin-top: 48px;
+}
+
+.report h2 {
+  margin: 40px 0 16px;
+}
+
+.total {
+  padding: 24px;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  background: var(--accent-bg);
+}
+
+.total-score {
+  font: 500 56px var(--heading);
+  color: var(--text-h);
+}
+
+.total-max {
+  font-size: 20px;
+  margin-left: 6px;
+}
+
+.total-meta {
+  margin-top: 4px;
+  font-size: 15px;
+}
+
+.scores {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.score-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.score-row strong {
+  color: var(--text-h);
+}
+
+.gauge {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--code-bg);
+  overflow: hidden;
+}
+
+.gauge-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.count {
+  font-size: 15px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  vertical-align: middle;
+}
+
+.issues {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.issue {
+  padding: 16px;
+  border: 1px solid var(--border);
+  /* The severity colour is carried by a thick left border. */
+  border-left: 4px solid var(--severity);
+  border-radius: 6px;
+}
+
+/* One CSS variable per severity: the rest of the style is shared. */
+.issue-critical {
+  --severity: #e5484d;
+}
+.issue-high {
+  --severity: #f76b15;
+}
+.issue-medium {
+  --severity: #ffb224;
+}
+.issue-low {
+  --severity: #8e8c99;
+}
+
+.issue-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.badge {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--severity);
+}
+
+.line {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.issue-message {
+  color: var(--text-h);
+}
+
+.issue-suggestion {
+  margin-top: 4px;
+  font-size: 15px;
+}
+
+.issue-suggestion::before {
+  content: '→ ';
+}
+
+/* ---------- raw response (collapsible) ---------- */
+
+.raw {
+  margin-top: 40px;
+}
+
+.raw summary {
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.raw pre {
+  font: 14px/150% var(--mono);
+  color: var(--text-h);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  overflow-x: auto;
+}
+
+/* ---------- tabs ---------- */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs button {
+  font: 500 15px var(--sans);
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.tabs button.active {
+  color: var(--text-h);
+  border-bottom-color: var(--accent);
+}
+
+/* ---------- folder picker ---------- */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.picker label {
+  font-size: 15px;
+  color: var(--text-h);
+}
+
+.picker > input {
+  font: 15px var(--sans);
+  color: var(--text-h);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.dropzone {
+  margin-top: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+
+.dropzone.over {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.file-button {
+  display: inline-block;
+  margin: 12px 0;
+  font: 500 15px var(--sans);
+  color: #fff;
+  background: var(--accent);
+  border-radius: 6px;
+  padding: 10px 20px;
+  cursor: pointer;
+}
+
+.file-button input {
+  display: none;
+}
+
+.hint {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.plan {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.plan button {
+  margin-top: 12px;
+  font: 500 16px var(--sans);
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  padding: 12px 24px;
+  cursor: pointer;
+}
+
+.plan button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.reasons {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 14px;
+}
+
+.manifest,
+.reading {
+  margin-top: 16px;
+  font-size: 15px;
+}
+
+/* ---------- report additions ---------- */
+
+.grade {
+  display: inline-block;
+  margin-left: 12px;
+  font: 500 22px var(--heading);
+  padding: 2px 14px;
+  border-radius: 6px;
+  color: #fff;
+  vertical-align: super;
+}
+
+.grade-A { background: #30a46c; }
+.grade-B { background: #6bab3e; }
+.grade-C { background: #ffb224; color: #1a1523; }
+.grade-D { background: #f76b15; }
+.grade-E { background: #e5484d; }
+
+.warning {
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 1px solid #ffb224;
+  border-left-width: 4px;
+  border-radius: 6px;
+  background: rgba(255, 178, 36, 0.1);
+}
+
+.missing {
+  color: var(--text);
+  font-style: italic;
+}
+
+.coverage {
+  font-size: 13px;
+  font-style: normal;
+  color: var(--text);
+}
+
+.gauge-unknown {
+  background: repeating-linear-gradient(
+    45deg, var(--border), var(--border) 4px, transparent 4px, transparent 8px
+  );
+}
+
+.symbols {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.symbols th,
+.symbols td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.symbols th {
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.files {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file {
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.file-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.file-meta {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.file-findings {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 14px;
+}
+
+.badge-critical { background: #e5484d; }
+.badge-high { background: #f76b15; }
+.badge-medium { background: #ffb224; }
+.badge-low { background: #8e8c99; }
+
+.issue-why,
+.issue-learn,
+.issue-doubt {
+  margin-top: 6px;
+  font-size: 15px;
+}
+
+.issue-learn {
+  color: var(--text);
+  font-style: italic;
+}
+
+.issue-doubt {
+  color: #f76b15;
+}
+
+.questions {
+  padding-left: 20px;
+}
+
+.questions li {
+  margin-bottom: 8px;
+}

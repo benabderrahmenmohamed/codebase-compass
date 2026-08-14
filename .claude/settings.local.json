@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python.exe -m pytest -q)",
+      "Bash(venv/Scripts/python.exe -c ' *)",
+      "Bash(venv/Scripts/python.exe -m pip install --quiet anthropic)",
+      "Bash(venv/Scripts/python.exe -m pip freeze)",
+      "Bash(venv/Scripts/python.exe -m pytest tests/test_claude_client.py -q)"
+    ]
+  }
+}
