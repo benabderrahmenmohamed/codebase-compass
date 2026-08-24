@@ -45,6 +45,17 @@ MAX_INPUT_TOKENS = 60_000
 
 REQUEST_TIMEOUT_SECONDS = 120.0
 
+# Dollars per million tokens, for claude-opus-5. Used only to show the user
+# what a run cost; the bill itself comes from Anthropic.
+#
+# Measured on a 47-line project: input 1,212 fresh + 2,098 cached, output
+# 3,617. Output was 93% of the cost. Focus windows shrink the INPUT, which
+# turns out to be the cheap half — the bill is what the model WRITES, and
+# that scales with how many findings it has to explain.
+PRICE_PER_MTOK_INPUT = 5.0
+PRICE_PER_MTOK_CACHED_INPUT = 0.5
+PRICE_PER_MTOK_OUTPUT = 25.0
+
 # Kept out of the system prompt on purpose: anything that changes between
 # requests must live BELOW the cache breakpoint, or the cache never hits.
 SYSTEM_PROMPT = """You help a developer understand a codebase they did not write.
@@ -108,6 +119,19 @@ class ClaudeResult(NamedTuple):
     @property
     def used_cache(self) -> bool:
         return self.cache_read_tokens > 0
+
+    @property
+    def estimated_cost_usd(self) -> float:
+        """What this call cost, in dollars.
+
+        An estimate for display, not an invoice: it uses the list prices
+        above and ignores anything Anthropic may apply on top.
+        """
+        return (
+            self.input_tokens / 1e6 * PRICE_PER_MTOK_INPUT
+            + self.cache_read_tokens / 1e6 * PRICE_PER_MTOK_CACHED_INPUT
+            + self.output_tokens / 1e6 * PRICE_PER_MTOK_OUTPUT
+        )
 
     @property
     def is_retryable(self) -> bool:

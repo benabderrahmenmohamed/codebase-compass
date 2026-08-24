@@ -108,6 +108,10 @@ def analyse_project(
         "llm_reason": llm.reason,
         "llm_retryable": llm.is_retryable,
         "llm_dropped_claims": llm.dropped_claims,
+        "llm_input_tokens": llm.input_tokens,
+        "llm_output_tokens": llm.output_tokens,
+        "llm_cache_read_tokens": llm.cache_read_tokens,
+        "llm_cost_usd": round(llm.estimated_cost_usd, 4),
         "explanations": llm.report.model_dump() if llm.report else None,
     }
 

@@ -15,7 +15,7 @@ A linter can tell you that `x` is a bad variable name. It cannot tell you that *
 holds a token expiry date**. That gap is where junior developers get stuck, and closing
 it is what this project is for.
 
-> ⚠️ **Early days.** Every layer is built and tested; the AI review has not yet been run
+> ⚠️ **Early days.** Every layer is built and tested, and the AI review has been run
 > against the live API. See [Status](#status).
 
 ---
@@ -54,8 +54,8 @@ needs it:
 
 The model never scans code looking for problems, and never sees a whole codebase — only
 a compact skeleton plus small windows around things already flagged by deterministic
-tools. That keeps cost roughly **$0.01–0.05 per project**, keeps the output verifiable,
-and means a complete report still exists when the LLM is unavailable.
+tools. That keeps the output verifiable and means a complete report still exists when
+the LLM is unavailable.
 
 ```
    project files
@@ -83,6 +83,30 @@ differently:
 - **Everything else** is scored by **density** per 100 lines. Three long lines in 30 is
   sloppy; three in 500 is noise.
 
+### What a run costs
+
+Measured on a 47-line, 8-finding project against `claude-opus-5`:
+
+| | tokens | cost | share |
+|---|---:|---:|---:|
+| input, fresh | 1,212 | $0.0061 | 6% |
+| input, cached | 2,098 | $0.0010 | 1% |
+| **output** | **3,617** | **$0.0904** | **93%** |
+| **total** | | **$0.098** | |
+
+**The bill is what the model writes, not what you send it.** Focus windows shrink the
+input — which turns out to be the cheap half. Cost scales with how many findings need
+explaining, so a larger project costs proportionally more: budget roughly **$0.10 for a
+small project and a few dollars for a large one**, and use `?use_llm=false` when you only
+want the map, the findings and the scores.
+
+Prompt caching is working (the 2,098 cached tokens above are billed at a tenth of the
+normal rate). Every run reports its own `llm_cost_usd`, so this is measured rather than
+guessed.
+
+Latency is currently **~55 seconds** for a small project — the model writes a lot. That is
+the next thing worth optimising.
+
 ---
 
 ## Status
@@ -99,7 +123,7 @@ differently:
 | ✅ | MCP server: 6 tools the model can call on demand | working |
 | ✅ | REST API + React frontend, folder picker and full report | working |
 | ✅ | **275 tests**, all offline, no API key needed, ~12 seconds | working |
-| 🔜 | First run against the live API | next |
+| ✅ | First live run: symbol translation verified against a real project | working |
 | 🔜 | Manifest files (`requirements.txt`, `package.json`) for "how to run it" | planned |
 | 🔜 | SQLite persistence, accounts, notifications | planned |
 

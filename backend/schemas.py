@@ -371,6 +371,18 @@ class ProjectAnalysisResponse(BaseModel):
         ge=0,
         description="Model claims discarded because they did not match the code",
     )
+    llm_input_tokens: int = Field(default=0, ge=0)
+    llm_output_tokens: int = Field(default=0, ge=0)
+    llm_cache_read_tokens: int = Field(
+        default=0, ge=0, description="Tokens served from cache, at 0.1x price"
+    )
+    llm_cost_usd: float = Field(
+        default=0.0,
+        ge=0,
+        description="Estimated cost of this run. Output dominates: it was 93% "
+        "of the bill in measurement, so cost tracks how much the model had "
+        "to explain, not how much code was sent.",
+    )
     explanations: ClaudeReport | None = None
 
 
