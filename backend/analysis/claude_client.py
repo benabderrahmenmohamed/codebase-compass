@@ -43,7 +43,15 @@ MAX_TOKENS = 16_000
 # the character estimate in context.py is only a pre-filter.
 MAX_INPUT_TOKENS = 60_000
 
-REQUEST_TIMEOUT_SECONDS = 120.0
+# Measured: a 60-file repository with the explanation cap in place takes 97
+# seconds. Against the previous 120-second limit that is 19% of headroom,
+# which a slightly larger project would spend — and the failure mode is
+# losing the explanations entirely, the one part no other tool produces.
+#
+# The cap in context.py is what made the request finish at all; this is
+# margin on top of it, not a substitute for it. Raising a timeout without
+# bounding the work only moves the cliff.
+REQUEST_TIMEOUT_SECONDS = 240.0
 
 # Dollars per million tokens, for claude-opus-5. Used only to show the user
 # what a run cost; the bill itself comes from Anthropic.

@@ -193,3 +193,88 @@ def test_a_project_with_no_findings_still_sends_the_map():
     assert payload.windows == []
     assert payload.skeleton_text
     assert payload.is_complete
+
+
+# --------------------------------------------------------------------------
+# The explanation cap
+#
+# The character budget bounds what is SENT. Nothing bounded what the model
+# had to WRITE, and writing is the slow and expensive half: a 55-file
+# repository handed it 100 findings and hit the 120-second timeout.
+# --------------------------------------------------------------------------
+
+
+def _many_findings(count: int):
+    return [
+        findings.Finding(
+            path="app.py",
+            line=index + 1,
+            severity="medium",
+            category="maintainability",
+            message=f"problem {index}",
+            suggestion="fix it",
+            source="metrics",
+            penalty=1,
+        )
+        for index in range(count)
+    ]
+
+
+def _wide_file(lines: int) -> dict[str, str]:
+    return {"app.py": "\n".join(f"line {n}" for n in range(1, lines + 1))}
+
+
+def test_only_the_worst_findings_are_sent_for_explanation():
+    contents = _wide_file(300)
+    findings = _many_findings(100)
+    payload = context.build_payload(contents, skeleton.build(contents), findings)
+
+    assert len(payload.findings) <= context.MAX_EXPLAINED_FINDINGS
+
+
+def test_the_findings_left_unexplained_are_counted_not_hidden():
+    contents = _wide_file(300)
+    payload = context.build_payload(
+        contents, skeleton.build(contents), _many_findings(100), max_explained=15
+    )
+
+    assert payload.findings_not_explained == 85
+
+
+def test_nothing_is_reported_unexplained_when_everything_fits():
+    contents = _wide_file(100)
+    payload = context.build_payload(
+        contents, skeleton.build(contents), _many_findings(5), max_explained=15
+    )
+
+    assert payload.findings_not_explained == 0
+
+
+def test_the_cap_keeps_the_worst_findings_first():
+    contents = _wide_file(60)
+    critical = findings.Finding(
+        path="app.py",
+        line=50,
+        severity="critical",
+        category="security",
+        message="sql injection",
+        suggestion="parameterise",
+        source="semgrep",
+        penalty=10,
+    )
+    # Ranked input: the critical one leads, as findings.rank would place it.
+    ranked = [critical, *_many_findings(40)]
+    payload = context.build_payload(
+        contents, skeleton.build(contents), ranked, max_explained=3
+    )
+
+    assert any(f.severity == "critical" for f in payload.findings)
+
+
+def test_the_cap_can_be_switched_off():
+    contents = _wide_file(300)
+    payload = context.build_payload(
+        contents, skeleton.build(contents), _many_findings(40), max_explained=0
+    )
+
+    assert payload.findings_not_explained == 0

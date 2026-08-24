@@ -183,6 +183,13 @@ function ProjectReport({ report }) {
       <h2>
         Priority problems <span className="count">{findings.length}</span>
       </h2>
+      {report.findings_not_explained > 0 && (
+        <p className="hint">
+          The {report.findings_not_explained} lowest-ranked findings are listed
+          without a written explanation. Explaining every one is what costs the
+          time and the money, and the worst are the ones worth reading first.
+        </p>
+      )}
       <ul className="issues">
         {findings.slice(0, 20).map((finding, index) => {
           const explained = report.explanations?.explained_findings?.find(

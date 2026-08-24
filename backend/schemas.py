@@ -416,6 +416,15 @@ class ProjectAnalysisResponse(BaseModel):
     semgrep_available: bool
     semgrep_reason: str | None
     context_windows_dropped: int = Field(ge=0)
+    findings_not_explained: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Findings ranked below the explanation cap. They are listed "
+            "in full under `findings`; the model was not asked to write "
+            "about them, because output is what costs time and money."
+        ),
+    )
     estimated_tokens: int = Field(ge=0)
 
     llm_used: bool

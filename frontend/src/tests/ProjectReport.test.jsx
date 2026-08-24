@@ -49,6 +49,7 @@ function makeReport(overrides = {}) {
     semgrep_available: true,
     semgrep_reason: null,
     context_windows_dropped: 0,
+    findings_not_explained: 0,
     estimated_tokens: 100,
     llm_used: true,
     llm_reason: null,
@@ -111,6 +112,18 @@ describe('ProjectReport', () => {
     report.scores.security = { ...report.scores.security, coverage: 'not_evaluated' }
     render(<ProjectReport report={report} />)
     expect(screen.getByText(/nothing measured this/i)).toBeInTheDocument()
+  })
+
+  it('says when the lowest-ranked findings went unexplained', () => {
+    render(<ProjectReport report={makeReport({ findings_not_explained: 85 })} />)
+    expect(
+      screen.getByText(/85 lowest-ranked findings are listed without a written explanation/i)
+    ).toBeInTheDocument()
+  })
+
+  it('stays quiet when everything was explained', () => {
+    render(<ProjectReport report={makeReport({ findings_not_explained: 0 })} />)
+    expect(screen.queryByText(/without a written explanation/i)).not.toBeInTheDocument()
   })
 
   it('reports findings that were dropped beyond the cap', () => {

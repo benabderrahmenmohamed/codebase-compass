@@ -37,6 +37,22 @@ MERGE_GAP = 4
 # estimate keeps the payload sane offline.
 DEFAULT_CHAR_BUDGET = 40_000
 
+# How many findings the model is asked to EXPLAIN.
+#
+# This is not the same limit as the report's finding cap, and it exists for a
+# different reason. The character budget bounds what we SEND; nothing bounded
+# what the model had to WRITE, and writing is both the slow half and the
+# expensive half — output was 93% of a measured bill. On a 55-file
+# repository the model was handed 100 findings, tried to explain all of them,
+# and hit the 120-second timeout: the deterministic report survived, and the
+# one thing no other tool does was replaced by "the request timed out".
+#
+# A newcomer cannot act on a hundred explanations anyway. They can act on the
+# worst fifteen. The findings are all still reported, ranked and counted —
+# only the explanations are capped, and the count that went unexplained is
+# reported rather than quietly dropped.
+MAX_EXPLAINED_FINDINGS = 15
+
 # Roughly four characters per token for source code. An estimate, never a
 # measurement — and deliberately not tiktoken, which is OpenAI's tokenizer
 # and undercounts Claude by 15-20%, far more on code.
@@ -84,6 +100,9 @@ class Payload(NamedTuple):
     findings: list[Finding]
     estimated_chars: int
     dropped_windows: int
+    # Findings ranked below the explanation cap. They appear in the report
+    # in full; they were simply not sent for the model to write about.
+    findings_not_explained: int = 0
 
     @property
     def estimated_tokens(self) -> int:
@@ -264,19 +283,31 @@ def build_payload(
     findings: list[Finding],
     char_budget: int = DEFAULT_CHAR_BUDGET,
     radius: int = DEFAULT_RADIUS,
+    max_explained: int = MAX_EXPLAINED_FINDINGS,
 ) -> Payload:
     """Assemble the skeleton plus as many windows as the budget allows.
 
     Windows are added worst-first, so a budget that runs out drops the least
     serious context — never a critical finding's surroundings. Whatever is
     dropped is counted and reported, never silently discarded.
+
+    Two different limits apply, for two different reasons. `max_explained`
+    bounds how many findings the model is asked to write about, because
+    output is what costs time and money. `char_budget` bounds how much code
+    is sent to support them.
     """
     # The map gets a fixed share at most, so it can never crowd out the code
     # windows it exists to introduce.
     skeleton_text = render_skeleton(
         skeleton, char_budget=int(char_budget * SKELETON_BUDGET_SHARE)
     )
-    ranked = build_windows(contents, findings, radius)
+    # `findings` arrives ranked worst-first, so the head of the list is the
+    # part worth explaining. Trimming here rather than after window building
+    # shrinks the input too: fewer findings need fewer windows around them.
+    explained = findings[:max_explained] if max_explained else findings
+    not_explained = len(findings) - len(explained)
+
+    ranked = build_windows(contents, explained, radius)
 
     used = len(skeleton_text)
     kept: list[Window] = []
@@ -296,7 +327,7 @@ def build_payload(
     kept.sort(key=lambda window: (window.path, window.start_line))
 
     shown = {(window.path, line) for window in kept for line in window.finding_lines}
-    kept_findings = [f for f in findings if (f.path, f.line) in shown]
+    kept_findings = [f for f in explained if (f.path, f.line) in shown]
 
     return Payload(
         skeleton_text=skeleton_text,
@@ -304,6 +335,7 @@ def build_payload(
         findings=kept_findings,
         estimated_chars=used,
         dropped_windows=dropped,
+        findings_not_explained=not_explained,
     )
 
 

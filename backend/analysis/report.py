@@ -102,6 +102,9 @@ def analyse_project(
         "semgrep_available": collected.semgrep_available,
         "semgrep_reason": collected.semgrep_reason,
         "context_windows_dropped": payload.dropped_windows,
+        # Findings below the explanation cap. They are all in `findings`
+        # above; the model was simply not asked to write about them.
+        "findings_not_explained": payload.findings_not_explained,
         "estimated_tokens": payload.estimated_tokens,
         # --- sections 1, 4, 5, 9: what the model added --------------------
         "llm_used": llm.available,
