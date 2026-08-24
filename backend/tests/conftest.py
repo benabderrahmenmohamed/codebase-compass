@@ -19,7 +19,10 @@ Neither guard affects subprocesses, so Semgrep still runs normally — it needs
 no network anyway, since the rules are local and telemetry is off.
 """
 
+import shutil
 import socket
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -77,4 +80,18 @@ def offline_and_free():
 
         patch.setattr(socket.socket, "connect", guarded_connect)
         patch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
+
+        # Third guard, added when storage moved to SQLite: the suite must
+        # never write to the real database. Without this, running the tests
+        # would empty a developer's own analysis history — clear() is
+        # autoused by several test modules, and it does exactly what it says.
+        #
+        # A temporary FILE, not ":memory:": storage opens one connection per
+        # call, and every in-memory connection would be a separate empty
+        # database.
+        database = tempfile.mkdtemp(prefix="compass-tests-") + "/test.db"
+        patch.setenv("COMPASS_DB", database)
+
         yield
+
+        shutil.rmtree(Path(database).parent, ignore_errors=True)

@@ -22,6 +22,12 @@ npm-debug.log*
 # --- Analysis engine temp directories ---------------------------------------
 analyse_qualite_*/
 
+# --- The SQLite database ----------------------------------------------------
+# Local data, not source. It holds submitted code, which may belong to
+# someone other than whoever cloned the repository.
+backend/data/
+*.db
+
 # --- Local tool configuration ---------------------------------------------
 .claude/settings.local.json
 
