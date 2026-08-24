@@ -60,11 +60,32 @@ function App() {
   return (
     <main className="app">
       <header className="masthead">
-        <h1>Understand a codebase you didn't write</h1>
-        <p>
-          Point it at a project: it maps the code, tells you where to start
-          reading, and shows what you are not yet experienced enough to notice.
+        <h1>Codebase Compass</h1>
+        <p className="tagline">
+          Static analysis and AI review for Python and JavaScript projects —
+          code you have just inherited, or code you have just written.
         </p>
+        <ul className="capabilities">
+          <li>
+            <strong>Structure map</strong>
+            Files, imports, entry points, and a reading order computed from the
+            import graph rather than guessed.
+          </li>
+          <li>
+            <strong>Ranked findings</strong>
+            Security, performance, readability, maintainability and best
+            practices — each with why it matters and how to fix it.
+          </li>
+          <li>
+            <strong>Symbol translation</strong>
+            What an unclear name actually holds, and what it should be called.
+          </li>
+          <li>
+            <strong>Health score</strong>
+            Five categories out of 20, with an A–E grade and what was
+            measured to reach it.
+          </li>
+        </ul>
       </header>
 
       <nav className="tabs">
@@ -86,7 +107,7 @@ function App() {
             reset()
           }}
         >
-          Quick check
+          Single snippet
         </button>
       </nav>
 

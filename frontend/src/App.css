@@ -17,6 +17,36 @@
   margin: 16px 0 8px;
 }
 
+.masthead .tagline {
+  max-width: 62ch;
+  margin: 0;
+}
+
+/* What the tool produces, stated up front. Four short claims read faster
+   than one long sentence, and each maps to a section of the report. */
+.capabilities {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px 24px;
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+}
+
+.capabilities li {
+  font-size: 14px;
+  line-height: 1.45;
+  padding-left: 12px;
+  border-left: 2px solid var(--accent-border);
+}
+
+.capabilities strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text-h);
+  margin-bottom: 2px;
+}
+
 /* ---------- form ---------- */
 
 .form {
