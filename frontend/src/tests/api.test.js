@@ -69,14 +69,33 @@ describe('analyzeCode', () => {
 describe('submitProject', () => {
   it('posts the files and the optional name', async () => {
     respond({ body: { project_id: 'p1' } })
-    await submitProject([{ path: 'a.py', content: 'x' }], 'demo')
+    await submitProject({ files: [{ path: 'a.py', content: 'x' }] }, 'demo')
     const sent = JSON.parse(globalThis.fetch.mock.calls[0][1].body)
     expect(sent).toEqual({ name: 'demo', files: [{ path: 'a.py', content: 'x' }] })
   })
 
+  it('posts a repository reference instead of files', async () => {
+    respond({ body: { project_id: 'p1' } })
+    await submitProject({ repo: 'acme/widget' }, null)
+    const sent = JSON.parse(globalThis.fetch.mock.calls[0][1].body)
+    expect(sent).toEqual({ name: null, repo: 'acme/widget' })
+  })
+
+  it('surfaces the 404 for a repository that is missing or private', async () => {
+    respond({ ok: false, status: 404, body: { detail: 'No such public repository.' } })
+    await expect(submitProject({ repo: 'acme/nope' }, null)).rejects.toThrow(
+      'No such public repository.'
+    )
+  })
+
+  it('surfaces the 429 when GitHub rate-limits the fetch', async () => {
+    respond({ ok: false, status: 429, body: { detail: "GitHub's rate limit was reached." } })
+    await expect(submitProject({ repo: 'acme/widget' }, null)).rejects.toThrow(/rate limit/)
+  })
+
   it('surfaces the 413 limit message', async () => {
     respond({ ok: false, status: 413, body: { detail: 'Too many files' } })
-    await expect(submitProject([], null)).rejects.toThrow('Too many files')
+    await expect(submitProject({ files: [] }, null)).rejects.toThrow('Too many files')
   })
 })
 

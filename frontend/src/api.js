@@ -82,11 +82,17 @@ export async function analyzeCode(code, language) {
 }
 
 /**
- * Send a whole project: a list of { path, content }.
+ * Send a whole project, from one of two sources.
+ *
+ * `source` is either { files: [{ path, content }] } for an uploaded folder,
+ * or { repo: "owner/repo" } for a public GitHub repository the server
+ * fetches itself. Never both: the API refuses a submission naming two
+ * sources, because one report cannot describe two projects.
+ *
  * Returns which files were accepted and which were skipped, and why.
  */
-export async function submitProject(files, name) {
-  return request('/projects', { name: name || null, files })
+export async function submitProject(source, name) {
+  return request('/projects', { name: name || null, ...source })
 }
 
 /**

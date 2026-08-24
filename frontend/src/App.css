@@ -342,6 +342,41 @@
   display: none;
 }
 
+/* "or" between the two sources, with a rule either side. */
+.separator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 12px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text);
+}
+
+.separator::before,
+.separator::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.hint-warn {
+  color: #b3261e;
+}
+
+.hint-cleared {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+}
+
+button.analyse {
+  margin-top: 16px;
+}
+
 .hint {
   font-size: 14px;
   color: var(--text);

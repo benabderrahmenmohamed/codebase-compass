@@ -7,7 +7,7 @@ validate what comes in, filter what goes out, and generate the /docs page.
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Severity(str, Enum):
@@ -151,7 +151,13 @@ class ProjectFile(BaseModel):
 
 
 class ProjectSubmission(BaseModel):
-    """What the client SENDS in the body of POST /projects."""
+    """What the client SENDS in the body of POST /projects.
+
+    A project arrives one of two ways: `files`, uploaded from a folder the
+    user picked, or `repo`, a public GitHub repository we fetch ourselves.
+    Exactly one — see `exactly_one_source` below for why "both" is an
+    error rather than a preference.
+    """
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -168,7 +174,8 @@ class ProjectSubmission(BaseModel):
                             "content": "class Order:\n    pass\n",
                         },
                     ],
-                }
+                },
+                {"repo": "https://github.com/benabderrahmenmohamed/codebase-compass"},
             ]
         }
     )
@@ -178,10 +185,47 @@ class ProjectSubmission(BaseModel):
         max_length=100,
         description="Project name. Optional.",
     )
-    files: list[ProjectFile] = Field(
+    files: list[ProjectFile] | None = Field(
+        default=None,
         min_length=1,
-        description="The project files. At least one.",
+        description="The project files, when uploading a folder.",
     )
+    repo: str | None = Field(
+        default=None,
+        max_length=300,
+        description=(
+            "A public GitHub repository: a browser URL, an SSH remote, or "
+            "owner/repo. Any other host is refused."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def exactly_one_source(self):
+        """Refuse a submission that names no source, or two.
+
+        Neither is obvious. Both is the interesting case, and it is refused
+        rather than resolved.
+
+        Preferring one silently would hand the user a report about code they
+        did not think they submitted — they would read a grade for a GitHub
+        repository while looking at the folder they had picked, and nothing
+        on the page would say so. That is the same failure the whole project
+        is built to avoid: an answer that looks complete while quietly
+        describing something else.
+
+        The interface prevents this from arising at all by clearing one
+        field when the other is used. This check is what protects the API
+        from a caller that has no such interface.
+        """
+        if self.files and self.repo:
+            raise ValueError(
+                "Send either 'files' or 'repo', not both. "
+                "Two sources would produce one report, and it could only "
+                "describe one of them."
+            )
+        if not self.files and not self.repo:
+            raise ValueError("Send either 'files' (a picked folder) or 'repo'.")
+        return self
 
 
 class AcceptedFile(BaseModel):
@@ -213,6 +257,21 @@ class ProjectResponse(BaseModel):
 
     project_id: str = Field(description="Unique identifier of the project (UUID)")
     name: str | None = Field(description="Name supplied by the client")
+    source: str = Field(
+        default="upload",
+        description="upload | github — where the files came from",
+    )
+    repo_url: str | None = Field(
+        default=None,
+        description="The repository analysed, when source is github",
+    )
+    truncated: bool = Field(
+        default=False,
+        description=(
+            "True when the repository was too large to list in full, so "
+            "files exist that were never even seen"
+        ),
+    )
     accepted_files: list[AcceptedFile] = Field(description="Files kept")
     skipped: list[SkippedFile] = Field(description="Files left out, and why")
     total_chars: int = Field(ge=0, description="Total size kept")

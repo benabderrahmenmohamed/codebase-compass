@@ -320,6 +320,47 @@ def module_name(path: str) -> str:
     return stem.replace("/", ".")
 
 
+def python_module_map(files) -> dict[str, str]:
+    """Map every dotted module name a project file can answer to.
+
+    A file tree does not say where Python's import root is, and assuming it
+    is the project root is wrong for most real repositories. Submitting the
+    `backend/` folder gives `analysis/skeleton.py`, so `from analysis import
+    ingestion` resolves. Fetching the whole repository gives
+    `backend/analysis/skeleton.py`, the same import resolves to nothing, and
+    every internal module is then reported as a third-party dependency —
+    which is how `storage`, `schemas` and `routers` came to be listed
+    alongside `fastapi` and `pydantic`.
+
+    So shorter names are registered as well: `backend.analysis.skeleton`
+    also answers to `analysis.skeleton` and to `skeleton`.
+
+    A shortened name is registered ONLY when exactly one file claims it.
+    Two `util.py` in different folders leave `util` unregistered, so the
+    import stays unresolved instead of being attached to whichever file
+    happened to be parsed first. An unresolved import is visible; a
+    confidently wrong edge in the graph is not.
+    """
+    full: dict[str, str] = {}
+    claims: dict[str, set[str]] = {}
+
+    for file in files:
+        if file.language != "python":
+            continue
+        name = module_name(file.path)
+        full[name] = file.path
+        parts = name.split(".")
+        for start in range(1, len(parts)):
+            claims.setdefault(".".join(parts[start:]), set()).add(file.path)
+
+    # A full path always wins over a shortened one.
+    resolved = dict(full)
+    for name, paths in claims.items():
+        if name not in resolved and len(paths) == 1:
+            resolved[name] = next(iter(paths))
+    return resolved
+
+
 def _resolve_python(raw: str, from_path: str, modules: dict[str, str]) -> str | None:
     """Find which project file a Python import refers to, if any."""
     if raw.startswith("."):
@@ -405,9 +446,7 @@ def build(contents: dict[str, str]) -> ProjectSkeleton:
             files.append(parse_javascript(path, content))
 
     known_paths = {file.path for file in files}
-    python_modules = {
-        module_name(file.path): file.path for file in files if file.language == "python"
-    }
+    python_modules = python_module_map(files)
 
     imports_graph: dict[str, list[str]] = {}
     imported_by: dict[str, list[str]] = {file.path: [] for file in files}

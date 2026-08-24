@@ -48,6 +48,12 @@ def test_creation_returns_201_and_the_expected_shape():
         "skipped",
         "total_chars",
         "created_at",
+        # Provenance, added when projects could also arrive from GitHub. An
+        # upload has to answer these too, or the client would have to know
+        # which kind of project it is holding before it can read the reply.
+        "source",
+        "repo_url",
+        "truncated",
     }
     assert len(body["accepted_files"]) == 3
     assert body["skipped"] == []

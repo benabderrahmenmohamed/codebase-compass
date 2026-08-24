@@ -41,13 +41,16 @@ function App() {
     }
   }
 
-  async function handleProject(files, name) {
+  // `source` is { files } for an uploaded folder or { repo } for GitHub.
+  async function handleProject(source, name) {
     reset()
     setLoading(true)
     try {
       // Two calls: submission answers instantly, so the user sees what was
-      // accepted while the analysis runs.
-      const submitted = await submitProject(files, name)
+      // accepted while the analysis runs. For a GitHub project the first
+      // call also does the fetching, so it is slower — but it is still the
+      // call that reports what was found before anything is analysed.
+      const submitted = await submitProject(source, name)
       setManifest(submitted)
       setProjectReport(await analyseProject(submitted.project_id))
     } catch (e) {
@@ -143,8 +146,21 @@ function App() {
 
       {manifest && (
         <p className="manifest">
+          {manifest.source === 'github' && manifest.repo_url && (
+            <>
+              <a href={manifest.repo_url} target="_blank" rel="noreferrer">
+                {manifest.name}
+              </a>
+              {' · '}
+            </>
+          )}
           {manifest.accepted_files.length} files accepted
           {manifest.skipped.length > 0 && `, ${manifest.skipped.length} skipped`}
+          {/* A truncated listing means files exist that were never even
+              seen — different from files seen and skipped, and the only
+              honest way to show a partial analysis. */}
+          {manifest.truncated &&
+            ' · the repository was too large to list in full, so some files were never seen'}
         </p>
       )}
 

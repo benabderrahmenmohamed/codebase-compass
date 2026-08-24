@@ -31,3 +31,20 @@ def anthropic_api_key() -> str | None:
 def has_api_key() -> bool:
     """Whether the LLM layer can run at all."""
     return anthropic_api_key() is not None
+
+
+def github_token() -> str | None:
+    """A GitHub token, or None.
+
+    Entirely optional, and it buys one thing: rate limit. Fetching a
+    repository costs two API requests — metadata and tree — and GitHub
+    allows 60 an hour to an anonymous caller, against 5000 to a
+    authenticated one. File contents come from the raw host and are not
+    charged against either figure.
+
+    It grants no access this tool would otherwise lack: only public
+    repositories are supported, so a token is a throughput setting rather
+    than a permission.
+    """
+    token = os.environ.get("GITHUB_TOKEN")
+    return token or None

@@ -24,6 +24,11 @@ python-dotenv==1.2.2
 # --- MCP server --------------------------------------------------------
 mcp==1.23.3
 
+# --- GitHub source -----------------------------------------------------
+# Already arrived transitively, which is exactly how the pywin32 mistake
+# happened: listed here because analysis/github_source.py imports it.
+httpx==0.28.1
+
 # --- Tests -------------------------------------------------------------
 # Kept here rather than in a separate file: running the suite is part of the
 # documented setup, and one file is one fewer thing to get wrong.

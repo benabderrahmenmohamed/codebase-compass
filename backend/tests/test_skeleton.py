@@ -281,3 +281,63 @@ def test_the_reading_order_is_bounded():
     order = skeleton.reading_order(skeleton.build(PROJECT), limit=3)
 
     assert len(order) == 3
+
+
+# --------------------------------------------------------------------------
+# Import roots: a repository does not say where Python's root is
+# --------------------------------------------------------------------------
+
+
+def test_internal_imports_resolve_when_the_code_sits_in_a_subfolder():
+    """The bug a whole-repository fetch exposed.
+
+    Uploading the backend folder gives 'analysis/x.py'; fetching the repo
+    gives 'backend/analysis/x.py'. The same import must resolve in both, or
+    every internal module is reported as a third-party dependency.
+    """
+    contents = {
+        "backend/main.py": "from analysis import ingestion\nimport storage\n",
+        "backend/analysis/ingestion.py": "def prepare():\n    pass\n",
+        "backend/storage.py": "def save():\n    pass\n",
+    }
+    built = skeleton.build(contents)
+
+    assert built.external_dependencies == []
+    assert set(built.imports_graph["backend/main.py"]) == {
+        "backend/analysis/ingestion.py",
+        "backend/storage.py",
+    }
+
+
+def test_a_real_third_party_import_is_still_external():
+    contents = {
+        "backend/main.py": "from fastapi import FastAPI\nfrom analysis import x\n",
+        "backend/analysis/x.py": "y = 1\n",
+    }
+    built = skeleton.build(contents)
+
+    assert built.external_dependencies == ["fastapi"]
+
+
+def test_an_ambiguous_short_name_is_left_unresolved_rather_than_guessed():
+    """Two util.py in different packages: guessing would draw a false edge."""
+    contents = {
+        "app/main.py": "import util\n",
+        "app/a/util.py": "x = 1\n",
+        "app/b/util.py": "y = 2\n",
+    }
+    built = skeleton.build(contents)
+
+    assert built.imports_graph["app/main.py"] == []
+    assert "util" in built.external_dependencies
+
+
+def test_a_full_path_beats_a_shortened_one():
+    contents = {
+        "main.py": "import config\n",
+        "config.py": "AT_ROOT = True\n",
+        "deep/nested/config.py": "NESTED = True\n",
+    }
+    built = skeleton.build(contents)
+
+    assert built.imports_graph["main.py"] == ["config.py"]

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import ProjectPicker from '../components/ProjectPicker'
 import { formatChars } from '../projectFiles'
@@ -74,7 +74,10 @@ describe('ProjectPicker drop handling', () => {
     await waitFor(() => screen.getByRole('button', { name: /Analyse 1 file/ }))
     screen.getByRole('button', { name: /Analyse 1 file/ }).click()
 
-    expect(onAnalyse).toHaveBeenCalledWith([{ path: 'demo/main.py', content: 'print(1)' }], '')
+    expect(onAnalyse).toHaveBeenCalledWith(
+      { files: [{ path: 'demo/main.py', content: 'print(1)' }] },
+      ''
+    )
   })
 
   it('reports a pruned dependency folder instead of dropping it silently', async () => {
@@ -109,5 +112,111 @@ describe('ProjectPicker drop handling', () => {
     const { container } = render(<ProjectPicker onAnalyse={vi.fn()} busy />)
     drop(container.querySelector('.dropzone'), [dirEntry('demo', [fileEntry('a.py')])])
     await waitFor(() => expect(screen.getByRole('button', { name: /Analysing/ })).toBeDisabled())
+  })
+})
+
+// --------------------------------------------------------------------------
+// Two sources, never at once
+// --------------------------------------------------------------------------
+
+describe('ProjectPicker source selection', () => {
+  function typeRepo(container, value) {
+    const input = container.querySelector('#repo')
+    fireEvent.change(input, { target: { value } })
+    return input
+  }
+
+  it('offers to analyse a repository once the reference parses', () => {
+    const { container } = render(<ProjectPicker onAnalyse={vi.fn()} busy={false} />)
+    typeRepo(container, 'https://github.com/acme/widget')
+
+    expect(screen.getByRole('button', { name: /Analyse acme\/widget/ })).toBeInTheDocument()
+  })
+
+  it('sends the repository rather than files', () => {
+    const onAnalyse = vi.fn()
+    const { container } = render(<ProjectPicker onAnalyse={onAnalyse} busy={false} />)
+    typeRepo(container, 'acme/widget')
+    screen.getByRole('button', { name: /Analyse acme\/widget/ }).click()
+
+    expect(onAnalyse).toHaveBeenCalledWith({ repo: 'acme/widget' }, '')
+  })
+
+  it('warns immediately about a host it will not fetch', () => {
+    const { container } = render(<ProjectPicker onAnalyse={vi.fn()} busy={false} />)
+    typeRepo(container, 'https://gitlab.com/acme/widget')
+
+    expect(screen.getByText(/not a GitHub repository/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Analyse/ })).not.toBeInTheDocument()
+  })
+
+  it('names the branch when the URL carries one', () => {
+    const { container } = render(<ProjectPicker onAnalyse={vi.fn()} busy={false} />)
+    typeRepo(container, 'https://github.com/acme/widget/tree/develop')
+
+    expect(screen.getByText(/on branch/i)).toBeInTheDocument()
+    expect(screen.getByText('develop')).toBeInTheDocument()
+  })
+
+  // The API refuses a submission carrying both. Rather than let the user
+  // build one, the interface makes it impossible to express.
+  it('clears a chosen folder when a repository is typed, and says so', async () => {
+    const { container } = render(<ProjectPicker onAnalyse={vi.fn()} busy={false} />)
+    drop(container.querySelector('.dropzone'), [dirEntry('demo', [fileEntry('a.py')])])
+    await waitFor(() => expect(container.querySelector('.plan')).toHaveTextContent('1 file ready'))
+
+    typeRepo(container, 'acme/widget')
+
+    expect(container.querySelector('.plan')).toBeNull()
+    expect(screen.getByText(/folder was cleared/i)).toBeInTheDocument()
+  })
+
+  it('clears a typed repository when a folder is dropped, and says so', async () => {
+    const { container } = render(<ProjectPicker onAnalyse={vi.fn()} busy={false} />)
+    typeRepo(container, 'acme/widget')
+    drop(container.querySelector('.dropzone'), [dirEntry('demo', [fileEntry('a.py')])])
+
+    await waitFor(() => expect(screen.getByText(/repository was cleared/i)).toBeInTheDocument())
+    expect(container.querySelector('#repo')).toHaveValue('')
+  })
+
+  it('never offers both sources at the same time', async () => {
+    const onAnalyse = vi.fn()
+    const { container } = render(<ProjectPicker onAnalyse={onAnalyse} busy={false} />)
+    drop(container.querySelector('.dropzone'), [dirEntry('demo', [fileEntry('a.py')])])
+    await waitFor(() => container.querySelector('.plan'))
+    typeRepo(container, 'acme/widget')
+
+    // Exactly one analyse button, and it is the repository one.
+    const buttons = screen.getAllByRole('button', { name: /Analyse/ })
+    expect(buttons).toHaveLength(1)
+    buttons[0].click()
+    expect(onAnalyse).toHaveBeenCalledWith({ repo: 'acme/widget' }, '')
+  })
+
+  it('drops the cleared notice once the repository field is emptied again', () => {
+    const { container } = render(<ProjectPicker onAnalyse={vi.fn()} busy={false} />)
+    typeRepo(container, 'acme/widget')
+    typeRepo(container, '')
+
+    expect(screen.queryByText(/cleared/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('ProjectPicker button wording', () => {
+  it('says "1 file", not "1 files"', async () => {
+    const { container } = render(<ProjectPicker onAnalyse={vi.fn()} busy={false} />)
+    drop(container.querySelector('.dropzone'), [dirEntry('demo', [fileEntry('a.py')])])
+    await waitFor(() => screen.getByRole('button', { name: /Analyse/ }))
+
+    expect(screen.getByRole('button', { name: 'Analyse 1 file' })).toBeInTheDocument()
+  })
+
+  it('pluralises beyond one', async () => {
+    const { container } = render(<ProjectPicker onAnalyse={vi.fn()} busy={false} />)
+    drop(container.querySelector('.dropzone'), [
+      dirEntry('demo', [fileEntry('a.py'), fileEntry('b.py')]),
+    ])
+    await waitFor(() => screen.getByRole('button', { name: 'Analyse 2 files' }))
   })
 })
