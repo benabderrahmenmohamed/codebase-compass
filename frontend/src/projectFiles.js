@@ -19,9 +19,24 @@ export const MAX_FILES = 200
 export const MAX_CHARS_PER_FILE = 50_000
 export const MAX_CHARS_TOTAL = 2_000_000
 
-function relativePath(file) {
-  // The folder picker fills webkitRelativePath; a plain drag-and-drop does not.
-  return (file.webkitRelativePath || file.name).replace(/\\/g, '/')
+// The server refuses more than 5000 submitted entries, so there is no reason
+// to walk further than that. Without a bound, dropping a home directory would
+// freeze the tab.
+export const MAX_WALK_ENTRIES = 5000
+
+function normalise(path) {
+  return path.replace(/\\/g, '/')
+}
+
+/**
+ * Size for display.
+ *
+ * Rounding straight to thousands showed "0 k characters" for a small but
+ * perfectly valid project, which reads as "nothing was read".
+ */
+export function formatChars(total) {
+  if (total < 1000) return `${total} characters`
+  return `${Math.round(total / 1000)} k characters`
 }
 
 function isIgnored(path) {
@@ -36,27 +51,126 @@ function hasAllowedExtension(path) {
 }
 
 /**
+ * Entries from the folder PICKER.
+ *
+ * The picker fills webkitRelativePath ("backend/main.py"); a plain multi-file
+ * selection does not, so we fall back to the bare name.
+ */
+export function fromFileList(fileList) {
+  return Array.from(fileList ?? []).map((file) => ({
+    file,
+    path: normalise(file.webkitRelativePath || file.name),
+  }))
+}
+
+/**
+ * Read a directory fully.
+ *
+ * readEntries() returns AT MOST 100 entries per call in Chromium and says
+ * nothing about it — you must keep calling until it hands back an empty
+ * batch. Reading once is the single most common bug in folder-drop code: it
+ * silently truncates every directory to its first 100 children.
+ */
+function readAllEntries(reader) {
+  return new Promise((resolve, reject) => {
+    const found = []
+    const readBatch = () => {
+      reader.readEntries((batch) => {
+        if (batch.length === 0) {
+          resolve(found)
+          return
+        }
+        found.push(...batch)
+        readBatch()
+      }, reject)
+    }
+    readBatch()
+  })
+}
+
+async function walk(entry, prefix, found, skipped) {
+  if (found.length >= MAX_WALK_ENTRIES) return
+
+  if (entry.isFile) {
+    const file = await new Promise((resolve, reject) => entry.file(resolve, reject))
+    found.push({ file, path: prefix + entry.name })
+    return
+  }
+
+  if (entry.isDirectory) {
+    // Prune before descending. Walking node_modules only to throw the result
+    // away would take longer than the analysis itself, and reporting 40,000
+    // skipped files is not a message anybody reads.
+    if (IGNORED_FOLDERS.includes(entry.name)) {
+      skipped.push({ path: prefix + entry.name, reason: 'ignored_folder' })
+      return
+    }
+    const children = await readAllEntries(entry.createReader())
+    for (const child of children) {
+      await walk(child, `${prefix + entry.name}/`, found, skipped)
+    }
+  }
+}
+
+/**
+ * Entries from a DROP.
+ *
+ * dataTransfer.files cannot represent a directory: dropping a folder puts one
+ * extension-less entry in it that reads as an empty file. webkitGetAsEntry is
+ * the only way to see the tree.
+ *
+ * The entries must be taken SYNCHRONOUSLY, before the first await — a
+ * DataTransfer is emptied as soon as the drop handler returns, so awaiting
+ * first and reading second gets you nothing.
+ */
+export async function fromDataTransfer(dataTransfer) {
+  const items = Array.from(dataTransfer?.items ?? [])
+  const entries = items
+    .map((item) => (item.webkitGetAsEntry ? item.webkitGetAsEntry() : null))
+    .filter(Boolean)
+
+  // No File System Entries API: fall back to the flat list. Plain files still
+  // work; folders cannot, and there is nothing we can do about that here.
+  if (entries.length === 0) {
+    return { entries: fromFileList(dataTransfer?.files), skipped: [] }
+  }
+
+  const found = []
+  const skipped = []
+  for (const entry of entries) {
+    await walk(entry, '', found, skipped)
+  }
+
+  if (found.length >= MAX_WALK_ENTRIES) {
+    skipped.push({ path: `beyond ${MAX_WALK_ENTRIES} entries`, reason: 'too_many_files' })
+  }
+
+  return { entries: found, skipped }
+}
+
+/**
  * Decide what to send before reading a single byte.
  *
- * Returns { toSend, skipped } where skipped explains each omission, so the
- * user can see that node_modules was dropped rather than wonder why the
- * report looks thin.
+ * Takes the { file, path } entries produced by fromFileList or
+ * fromDataTransfer. Returns { toSend, skipped } where skipped explains each
+ * omission, so the user can see that node_modules was dropped rather than
+ * wonder why the report looks thin.
  */
-export function planUpload(fileList) {
+export function planUpload(entries) {
   const toSend = []
   const skipped = []
 
-  for (const file of Array.from(fileList)) {
-    const path = relativePath(file)
+  for (const entry of entries) {
+    const path = normalise(entry.path)
 
     if (isIgnored(path)) {
       skipped.push({ path, reason: 'ignored_folder' })
     } else if (!hasAllowedExtension(path)) {
       skipped.push({ path, reason: 'unsupported_extension' })
-    } else if (file.size > MAX_CHARS_PER_FILE) {
+    } else if (entry.file.size > MAX_CHARS_PER_FILE) {
       skipped.push({ path, reason: 'file_too_large' })
     } else {
-      toSend.push({ file, path })
+      toSend.push({ file: entry.file, path })
     }
   }
 

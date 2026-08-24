@@ -1,5 +1,11 @@
 import { useRef, useState } from 'react'
-import { planUpload, readFiles } from '../projectFiles'
+import {
+  formatChars,
+  fromDataTransfer,
+  fromFileList,
+  planUpload,
+  readFiles,
+} from '../projectFiles'
 
 // Pick a folder, see what will be sent, then send it.
 //
@@ -12,30 +18,50 @@ function ProjectPicker({ onAnalyse, busy }) {
   const [plan, setPlan] = useState(null)
   const [name, setName] = useState('')
   const [reading, setReading] = useState(false)
+  const [failed, setFailed] = useState(null)
   const dropRef = useRef(null)
 
-  async function choose(fileList) {
-    if (!fileList || fileList.length === 0) return
+  // `entries` are { file, path } pairs; `preSkipped` are things already
+  // rejected during the walk, such as a pruned node_modules.
+  async function choose(entries, preSkipped = []) {
+    if (entries.length === 0) return
 
     setReading(true)
+    setFailed(null)
     try {
-      const planned = planUpload(fileList)
+      const planned = planUpload(entries)
       const read = await readFiles(planned.toSend)
       setPlan({
         files: read.files,
-        skipped: [...planned.skipped, ...read.skipped],
+        skipped: [...preSkipped, ...planned.skipped, ...read.skipped],
         totalChars: read.totalChars,
-        picked: fileList.length,
+        picked: entries.length + preSkipped.length,
       })
+    } catch (e) {
+      // A folder can become unreadable between the drop and the read, and a
+      // rejected promise here would otherwise vanish with no message at all.
+      setPlan(null)
+      setFailed(e.message || 'Those files could not be read.')
     } finally {
       setReading(false)
     }
   }
 
-  function handleDrop(event) {
+  async function handleDrop(event) {
     event.preventDefault()
     dropRef.current?.classList.remove('over')
-    choose(event.dataTransfer.files)
+    setReading(true)
+    try {
+      // Must read the DataTransfer before awaiting anything: it is emptied as
+      // soon as this handler returns.
+      const { entries, skipped } = await fromDataTransfer(event.dataTransfer)
+      await choose(entries, skipped)
+    } catch (e) {
+      setPlan(null)
+      setFailed(e.message || 'That folder could not be read.')
+    } finally {
+      setReading(false)
+    }
   }
 
   const reasons = {}
@@ -73,7 +99,7 @@ function ProjectPicker({ onAnalyse, busy }) {
             multiple
             webkitdirectory=""
             directory=""
-            onChange={(e) => choose(e.target.files)}
+            onChange={(e) => choose(fromFileList(e.target.files))}
           />
         </label>
         <p className="hint">
@@ -83,13 +109,14 @@ function ProjectPicker({ onAnalyse, busy }) {
       </div>
 
       {reading && <p className="reading">Reading files…</p>}
+      {failed && <p className="error">{failed}</p>}
 
       {plan && (
         <div className="plan">
           <p>
             <strong>{plan.files.length}</strong> file
             {plan.files.length === 1 ? '' : 's'} ready ·{' '}
-            {Math.round(plan.totalChars / 1000)} k characters ·{' '}
+            {formatChars(plan.totalChars)} ·{' '}
             <strong>{plan.skipped.length}</strong> skipped of {plan.picked}{' '}
             picked
           </p>

@@ -25,6 +25,11 @@ analyse_qualite_*/
 # --- Local tool configuration ---------------------------------------------
 .claude/settings.local.json
 
+# --- Personal documents ----------------------------------------------------
+# The university report carries a real name, supervisors and an institution.
+# This repository is public: that belongs on a hard drive, not in it.
+*.docx
+
 # --- OS and editors ----------------------------------------------------------
 .DS_Store
 Thumbs.db

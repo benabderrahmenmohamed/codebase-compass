@@ -22,6 +22,36 @@ function errorMessage(data, status) {
   return `Error ${status}`
 }
 
+/**
+ * Read the body as JSON, or return null.
+ *
+ * Not every failure comes back as JSON: a crash produces an HTML error page,
+ * and a proxy in front of the API produces its own. Calling .json() on those
+ * throws a parser error, and the user is then shown "Unexpected token '<'"
+ * instead of anything about their request.
+ */
+async function readJson(response) {
+  try {
+    return await response.json()
+  } catch {
+    return null
+  }
+}
+
+async function handle(response) {
+  const data = await readJson(response)
+
+  // CAREFUL: fetch does NOT throw on a 404 or a 422. Without this check we
+  // would carry on with an error body instead of a report.
+  if (!response.ok) {
+    throw new Error(errorMessage(data, response.status))
+  }
+  if (data === null) {
+    throw new Error('The server returned a response that could not be read.')
+  }
+  return data
+}
+
 async function request(path, body) {
   let response
 
@@ -39,15 +69,7 @@ async function request(path, body) {
     )
   }
 
-  const data = await response.json()
-
-  // CAREFUL: fetch does NOT throw on a 404 or a 422. Without this check we
-  // would carry on with an error body instead of a report.
-  if (!response.ok) {
-    throw new Error(errorMessage(data, response.status))
-  }
-
-  return data
+  return handle(response)
 }
 
 /**
@@ -89,9 +111,5 @@ export async function analyseProject(projectId, useLlm = true) {
     )
   }
 
-  const data = await response.json()
-  if (!response.ok) {
-    throw new Error(errorMessage(data, response.status))
-  }
-  return data
+  return handle(response)
 }
