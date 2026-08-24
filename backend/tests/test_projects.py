@@ -54,6 +54,8 @@ def test_creation_returns_201_and_the_expected_shape():
         "source",
         "repo_url",
         "truncated",
+        # Added with roles/permissions.
+        "owner",
     }
     assert len(body["accepted_files"]) == 3
     assert body["skipped"] == []

@@ -9,9 +9,12 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, status
 
+import permissions
 import settings
 import storage
 from analysis import github_source, ingestion, report
+from permissions import User
+from routers import security
 from schemas import (
     ErrorResponse,
     ProjectAnalysisResponse,
@@ -112,7 +115,7 @@ def _fetch_from_github(reference: str) -> github_source.GitHubResult:
         },
     },
 )
-def create_project(payload: ProjectSubmission):
+def create_project(payload: ProjectSubmission, user: User = security.CurrentUser):
     """Receive a project, skip what is not analysable, store the rest.
 
     The files arrive either uploaded from a picked folder or fetched from a
@@ -123,6 +126,8 @@ def create_project(payload: ProjectSubmission):
     A non-conforming file is SKIPPED (and listed in `skipped`); only an
     exceeded limit refuses the whole submission, with a 413.
     """
+    security.require(user, permissions.SUBMIT_PROJECT)
+
     source = "upload"
     repo_url = None
     truncated = False
@@ -156,6 +161,7 @@ def create_project(payload: ProjectSubmission):
     project = {
         "project_id": str(uuid4()),
         "name": name,
+        "owner": user.name,
         "source": source,
         "repo_url": repo_url,
         "truncated": truncated,
@@ -181,9 +187,9 @@ def create_project(payload: ProjectSubmission):
     response_model=list[ProjectResponse],
     summary="List every project",
 )
-def list_projects():
-    """Return the full history, oldest first."""
-    return storage.get_all_projects()
+def list_projects(user: User = security.CurrentUser):
+    """Return the projects this user may see, oldest first."""
+    return permissions.visible_to(user, storage.get_all_projects())
 
 
 @router.get(
@@ -197,14 +203,15 @@ def list_projects():
         }
     },
 )
-def get_project(project_id: str):
-    """Return one project, or 404 if the id is unknown."""
+def get_project(project_id: str, user: User = security.CurrentUser):
+    """Return one project, or 404 if the id is unknown or not yours."""
     project = storage.get_project_by_id(project_id)
     if project is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
         )
+    security.require_readable(user, project, "Project")
     return project
 
 
@@ -223,7 +230,9 @@ def get_project(project_id: str):
         },
     },
 )
-def analyse_project(project_id: str, use_llm: bool = True):
+def analyse_project(
+    project_id: str, use_llm: bool = True, user: User = security.CurrentUser
+):
     """Run the full analysis and return the report.
 
     Submission and analysis are separate calls on purpose: ingestion is
@@ -239,6 +248,14 @@ def analyse_project(project_id: str, use_llm: bool = True):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found",
         )
+    security.require_readable(user, project, "Project")
+
+    # A guest asking for the AI review is not an error: the deterministic
+    # report is produced and says the explanations are missing, exactly as
+    # it does when there is no API key. This is the cost control — an
+    # anonymous visitor cannot spend the owner's Anthropic credit — and it
+    # lives in the permission matrix rather than in a rate limiter.
+    use_llm = permissions.llm_allowed(user, use_llm)
 
     contents = {
         file["path"]: project["_contents"][file["path"]]

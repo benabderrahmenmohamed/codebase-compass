@@ -107,6 +107,7 @@ class AnalysisResponse(BaseModel):
     )
 
     id: str = Field(description="Unique identifier of the analysis (UUID)")
+    owner: str = Field(default="anonymous", description="Who submitted it")
     language: str = Field(description="Language used for the analysis")
     scores: Scores = Field(description="The 5 scores out of 20")
     total_score: int = Field(
@@ -257,6 +258,7 @@ class ProjectResponse(BaseModel):
 
     project_id: str = Field(description="Unique identifier of the project (UUID)")
     name: str | None = Field(description="Name supplied by the client")
+    owner: str = Field(default="anonymous", description="Who submitted it")
     source: str = Field(
         default="upload",
         description="upload | github — where the files came from",
@@ -462,3 +464,50 @@ class ErrorResponse(BaseModel):
     )
 
     detail: str = Field(description="Message explaining the error")
+
+
+# ==========================================================================
+# Users
+#
+# A name and a role. No password and no email: this build does
+# authorisation, not authentication, and holding credentials it does not
+# need would be a liability rather than a feature.
+# ==========================================================================
+
+
+class UserIn(BaseModel):
+    """Creating or updating a user."""
+
+    model_config = ConfigDict(
+        json_schema_extra={"examples": [{"name": "alice", "role": "developer"}]}
+    )
+
+    name: str = Field(min_length=1, max_length=60)
+    role: str = Field(description="guest | developer | lead | admin")
+
+    @field_validator("name")
+    @classmethod
+    def name_is_clean(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("name cannot be blank")
+        return cleaned
+
+
+class UserOut(BaseModel):
+    """A user, as returned."""
+
+    name: str
+    role: str
+
+
+class WhoAmI(BaseModel):
+    """The caller's own identity and what it may do.
+
+    Exists so a client can render the interface it is allowed to use rather
+    than offering buttons that will answer 403.
+    """
+
+    name: str
+    role: str
+    permissions: list[str] = Field(description="Everything this role may do")

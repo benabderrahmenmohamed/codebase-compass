@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import analyses, projects
+from routers import analyses, projects, users
 
 app = FastAPI(
     title="Codebase Compass",
@@ -26,6 +26,7 @@ app.add_middleware(
 
 app.include_router(analyses.router)
 app.include_router(projects.router)
+app.include_router(users.router)
 
 
 @app.get("/", tags=["Health"])

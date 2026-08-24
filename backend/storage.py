@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at  TEXT NOT NULL,
     data        TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    name        TEXT PRIMARY KEY,
+    role        TEXT NOT NULL
+);
 """
 
 
@@ -198,12 +203,53 @@ def get_project_by_id(project_id: str) -> dict | None:
 
 
 # --------------------------------------------------------------------------
+# Users
+#
+# Only a name and a role. No password, no email, no session: this build does
+# authorisation, not authentication, and storing credentials we do not need
+# would be a liability rather than a feature.
+# --------------------------------------------------------------------------
+
+
+def save_user(name: str, role: str) -> dict:
+    """Create or update a user, and return it."""
+    with _connect() as connection:
+        connection.execute(
+            "INSERT OR REPLACE INTO users (name, role) VALUES (?, ?)", (name, role)
+        )
+    return {"name": name, "role": role}
+
+
+def get_user(name: str) -> dict | None:
+    """Look up a user by name. Returns None if unknown."""
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT name, role FROM users WHERE name = ?", (name,)
+        ).fetchone()
+    return {"name": row["name"], "role": row["role"]} if row else None
+
+
+def get_all_users() -> list[dict]:
+    """Every user, in creation order."""
+    with _connect() as connection:
+        rows = connection.execute("SELECT name, role FROM users ORDER BY rowid").fetchall()
+    return [{"name": row["name"], "role": row["role"]} for row in rows]
+
+
+def delete_user(name: str) -> bool:
+    """Remove a user. True if one was removed."""
+    with _connect() as connection:
+        cursor = connection.execute("DELETE FROM users WHERE name = ?", (name,))
+        return cursor.rowcount > 0
+
+
+# --------------------------------------------------------------------------
 # Maintenance
 # --------------------------------------------------------------------------
 
 
 def clear() -> None:
-    """Empty the store completely (analyses AND projects).
+    """Empty the store completely (analyses, projects AND users).
 
     Used by tests, so each one starts from a clean slate and does not depend
     on what another test left behind.
@@ -211,3 +257,4 @@ def clear() -> None:
     with _connect() as connection:
         connection.execute("DELETE FROM analyses")
         connection.execute("DELETE FROM projects")
+        connection.execute("DELETE FROM users")

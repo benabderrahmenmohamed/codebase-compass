@@ -60,6 +60,9 @@ def test_creation_returns_201_and_a_complete_report():
     report = response.json()
     assert set(report) == {
         "id",
+        # Added with roles/permissions: every record records who submitted
+        # it, or "show me my analyses" has no answer.
+        "owner",
         "language",
         "scores",
         "total_score",
