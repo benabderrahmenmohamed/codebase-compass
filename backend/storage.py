@@ -71,6 +71,17 @@ CREATE TABLE IF NOT EXISTS users (
     name        TEXT PRIMARY KEY,
     role        TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id          TEXT PRIMARY KEY,
+    recipient   TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    read        INTEGER NOT NULL DEFAULT 0,
+    data        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS notifications_by_recipient
+    ON notifications (recipient);
 """
 
 
@@ -244,12 +255,86 @@ def delete_user(name: str) -> bool:
 
 
 # --------------------------------------------------------------------------
+# Notifications
+#
+# Indexed by recipient, because the only question ever asked of this table
+# is "what does this person need to see?".
+# --------------------------------------------------------------------------
+
+
+def save_notification(notification: dict) -> dict:
+    """Store one notification."""
+    with _connect() as connection:
+        connection.execute(
+            "INSERT OR REPLACE INTO notifications "
+            "(id, recipient, created_at, read, data) VALUES (?, ?, ?, ?, ?)",
+            (
+                notification["id"],
+                notification["recipient"],
+                _timestamp(notification),
+                int(bool(notification.get("read"))),
+                _encode(notification),
+            ),
+        )
+    return notification
+
+
+def get_notifications(recipient: str, unread_only: bool = False) -> list[dict]:
+    """One person's notifications, newest first.
+
+    Newest first here, unlike analyses and projects: an inbox is read from
+    the top, and the thing that just happened is the thing you want.
+    """
+    query = "SELECT data FROM notifications WHERE recipient = ?"
+    if unread_only:
+        query += " AND read = 0"
+    query += " ORDER BY rowid DESC"
+
+    with _connect() as connection:
+        rows = connection.execute(query, (recipient,)).fetchall()
+    return [_decode(row["data"]) for row in rows]
+
+
+def mark_notification_read(notification_id: str, recipient: str) -> bool:
+    """Mark one as read. False if it does not exist or is not theirs.
+
+    The recipient is part of the WHERE clause rather than checked
+    afterwards: without it, anyone holding an id could mark — and by
+    extension probe for — somebody else's notifications.
+    """
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT data FROM notifications WHERE id = ? AND recipient = ?",
+            (notification_id, recipient),
+        ).fetchone()
+        if row is None:
+            return False
+
+        record = _decode(row["data"])
+        record["read"] = True
+        connection.execute(
+            "UPDATE notifications SET read = 1, data = ? WHERE id = ? AND recipient = ?",
+            (_encode(record), notification_id, recipient),
+        )
+        return True
+
+
+def count_unread(recipient: str) -> int:
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT COUNT(*) AS n FROM notifications WHERE recipient = ? AND read = 0",
+            (recipient,),
+        ).fetchone()
+    return row["n"]
+
+
+# --------------------------------------------------------------------------
 # Maintenance
 # --------------------------------------------------------------------------
 
 
 def clear() -> None:
-    """Empty the store completely (analyses, projects AND users).
+    """Empty the store completely: analyses, projects, users, notifications.
 
     Used by tests, so each one starts from a clean slate and does not depend
     on what another test left behind.
@@ -258,3 +343,4 @@ def clear() -> None:
         connection.execute("DELETE FROM analyses")
         connection.execute("DELETE FROM projects")
         connection.execute("DELETE FROM users")
+        connection.execute("DELETE FROM notifications")

@@ -40,7 +40,9 @@ def as_user(name):
 def test_no_header_is_a_guest():
     body = client.get("/users/me").json()
     assert body["role"] == permissions.GUEST
-    assert body["name"] == permissions.ANONYMOUS
+    # Not the shared "anonymous" any more: each browser gets its own guest
+    # identity, or every visitor sees every other visitor's submissions.
+    assert body["name"].startswith(permissions.GUEST_PREFIX)
 
 
 def test_a_known_name_gets_its_role():
@@ -114,9 +116,9 @@ def test_a_submission_records_its_owner():
     assert body["owner"] == "alice"
 
 
-def test_a_guest_submission_is_owned_by_the_anonymous_pool():
+def test_a_guest_submission_is_owned_by_that_guest():
     body = client.post("/projects", json=PROJECT).json()
-    assert body["owner"] == permissions.ANONYMOUS
+    assert body["owner"].startswith(permissions.GUEST_PREFIX)
 
 
 def test_a_developer_does_not_see_another_developers_projects():
@@ -278,3 +280,122 @@ def test_without_the_variable_there_is_no_bootstrap(monkeypatch):
     )
 
     assert response.status_code == 403
+
+
+# --------------------------------------------------------------------------
+# One guest is not every guest
+#
+# Every anonymous visitor used to be the literal owner "anonymous", so one
+# could list, read and re-analyse another's projects. The source never
+# leaked — response_model strips file contents — but paths, project names
+# and findings did, which is a map of somebody's weak points.
+# --------------------------------------------------------------------------
+
+
+def fresh_visitor():
+    """A separate TestClient is a separate cookie jar: a different browser."""
+    return TestClient(app)
+
+
+def test_the_server_issues_a_guest_cookie():
+    visitor = fresh_visitor()
+    response = visitor.get("/users/me")
+
+    from routers.security import GUEST_COOKIE
+
+    assert GUEST_COOKIE in response.cookies
+
+
+def test_the_guest_cookie_is_not_readable_by_page_scripts():
+    """HttpOnly: a cross-site script cannot steal another visitor's identity."""
+    visitor = fresh_visitor()
+    response = visitor.get("/users/me")
+    header = response.headers["set-cookie"].lower()
+
+    assert "httponly" in header
+    assert "samesite=lax" in header
+
+
+def test_the_same_visitor_keeps_one_identity_across_requests():
+    visitor = fresh_visitor()
+    first = visitor.get("/users/me").json()["name"]
+    second = visitor.get("/users/me").json()["name"]
+
+    assert first == second
+
+
+def test_two_visitors_get_different_identities():
+    assert fresh_visitor().get("/users/me").json()["name"] != (
+        fresh_visitor().get("/users/me").json()["name"]
+    )
+
+
+def test_one_guest_cannot_list_anothers_projects():
+    alice_the_stranger = fresh_visitor()
+    alice_the_stranger.post("/projects", json=PROJECT)
+
+    assert fresh_visitor().get("/projects").json() == []
+
+
+def test_one_guest_cannot_read_anothers_project():
+    owner = fresh_visitor()
+    created = owner.post("/projects", json=PROJECT).json()
+
+    response = fresh_visitor().get(f"/projects/{created['project_id']}")
+
+    assert response.status_code == 404
+
+
+def test_one_guest_cannot_re_analyse_anothers_project():
+    """Re-analysis is the expensive one: it could spend somebody's budget."""
+    owner = fresh_visitor()
+    created = owner.post("/projects", json=PROJECT).json()
+
+    response = fresh_visitor().post(f"/projects/{created['project_id']}/analysis")
+
+    assert response.status_code == 404
+
+
+def test_one_guest_cannot_see_anothers_notifications():
+    owner = fresh_visitor()
+    created = owner.post("/projects", json=PROJECT).json()
+    owner.post(f"/projects/{created['project_id']}/analysis?use_llm=false")
+
+    assert fresh_visitor().get("/notifications").json() == []
+    assert owner.get("/notifications").json() != []
+
+
+def test_a_forged_cookie_gets_a_fresh_identity_rather_than_being_trusted():
+    """The token must be 32 hex characters. Anything else is replaced, so a
+    client cannot put arbitrary text into an owner string."""
+    from routers.security import GUEST_COOKIE
+
+    visitor = fresh_visitor()
+    visitor.cookies.set(GUEST_COOKIE, "../../etc/passwd")
+    name = visitor.get("/users/me").json()["name"]
+
+    assert name.startswith(permissions.GUEST_PREFIX)
+    assert "passwd" not in name
+
+
+def test_a_user_cannot_be_named_to_impersonate_a_guest():
+    """Guest identities share a namespace with user names."""
+    response = client.post(
+        "/users",
+        json={"name": "guest:deadbeefdeadbeefdeadbeefdeadbeef", "role": "developer"},
+        headers=as_user("root"),
+    )
+    assert response.status_code == 422
+
+
+def test_a_user_cannot_be_named_anonymous():
+    response = client.post(
+        "/users", json={"name": "anonymous", "role": "developer"}, headers=as_user("root")
+    )
+    assert response.status_code == 422
+
+
+def test_a_registered_name_still_wins_over_the_cookie():
+    visitor = fresh_visitor()
+    visitor.get("/users/me")  # picks up a guest cookie
+    assert visitor.get("/users/me", headers=as_user("alice")).json()["name"] == "alice"

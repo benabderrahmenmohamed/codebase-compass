@@ -89,10 +89,32 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
 # scores, grade — and never the paid layer.
 DEFAULT_ROLE = GUEST
 
-# The name recorded as the owner of anything a guest submits. Guests share
-# it, so a guest can see guest submissions; that is the honest consequence
-# of not identifying them, and it is why guests should not be given READ_ALL.
+# Legacy owner name. Everything a guest submitted before guests were told
+# apart carries this, and it is still honoured on read so those records do
+# not become unreachable.
+#
+# It used to be the owner of EVERY guest submission, which meant every
+# anonymous visitor was literally the same user: one of them could list,
+# read and re-analyse another's projects. The source itself never leaked —
+# `response_model` strips file contents everywhere — but file paths, project
+# names and findings did, which is a map of somebody's weak points.
+#
+# Guests now get their own identity per browser (see routers/security.py).
 ANONYMOUS = "anonymous"
+
+# Prefix for a per-visitor guest identity. Namespaced so it can never
+# collide with a registered user name — schemas.UserIn refuses names that
+# start with it.
+GUEST_PREFIX = "guest:"
+
+
+def guest_name(token: str) -> str:
+    """The owner string for one anonymous visitor."""
+    return f"{GUEST_PREFIX}{token}"
+
+
+def is_guest_name(name: str) -> bool:
+    return name.startswith(GUEST_PREFIX) or name == ANONYMOUS
 
 
 class User(NamedTuple):

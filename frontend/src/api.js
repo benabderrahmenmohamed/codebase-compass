@@ -60,6 +60,10 @@ async function request(path, body) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      // Carries the guest cookie the server sets, so this browser's
+      // submissions stay its own. Without it every anonymous visitor
+      // shares one identity and sees everybody else's projects.
+      credentials: 'include',
     })
   } catch {
     // We only get here when the network itself failed: server down, CORS
@@ -110,6 +114,7 @@ export async function analyseProject(projectId, useLlm = true) {
   try {
     response = await fetch(`${API_BASE_URL}/projects/${projectId}/analysis${query}`, {
       method: 'POST',
+      credentials: 'include',
     })
   } catch {
     throw new Error(

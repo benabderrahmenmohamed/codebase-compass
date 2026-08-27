@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, status
 
+import notifications
 import permissions
 import settings
 import storage
@@ -274,4 +275,10 @@ def analyse_project(
 
     result = report.analyse_project(contents, use_llm=use_llm)
     result["project_id"] = project_id
+
+    # Tell the submitter what happened. A failure to notify must never fail
+    # the analysis that triggered it — the report is the product, the
+    # notification is a courtesy on top of it — so deliver() never raises.
+    notifications.notify_report(result, project["owner"], project.get("name"))
+
     return result

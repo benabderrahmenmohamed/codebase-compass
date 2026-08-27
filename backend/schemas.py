@@ -491,6 +491,11 @@ class UserIn(BaseModel):
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("name cannot be blank")
+        # Guest identities live in the same namespace as user names, so a
+        # user called "guest:abc..." could be created to collide with one
+        # and read that visitor's submissions.
+        if cleaned.startswith("guest:") or cleaned == "anonymous":
+            raise ValueError("that name is reserved for anonymous visitors")
         return cleaned
 
 
@@ -511,3 +516,25 @@ class WhoAmI(BaseModel):
     name: str
     role: str
     permissions: list[str] = Field(description="Everything this role may do")
+
+
+# ==========================================================================
+# Notifications
+# ==========================================================================
+
+
+class NotificationOut(BaseModel):
+    """One notification, as the owner reads it."""
+
+    id: str
+    event: str = Field(description="analysis_complete | critical_finding | analysis_degraded")
+    title: str
+    body: str
+    channels: list[str] = Field(description="Where it was sent. push/sms are simulated.")
+    project_id: str | None = None
+    read: bool = False
+    created_at: datetime
+
+
+class UnreadCount(BaseModel):
+    unread: int = Field(ge=0)
