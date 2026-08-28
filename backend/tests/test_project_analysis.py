@@ -144,13 +144,19 @@ def test_every_category_reports_how_far_it_looked():
         )
 
 
-def test_a_javascript_file_reports_performance_as_not_evaluated():
-    """A score of 20 must never be read as a clean bill of health."""
+def test_a_javascript_file_reports_performance_as_only_partly_evaluated():
+    """A score of 20 must never be read as a clean bill of health.
+
+    This asserted "not_evaluated" while the only performance detector
+    was Python-only. The performance rule pack added JavaScript rules,
+    so Semgrep now looks — but the AST metrics still do not, and the
+    coverage flag says exactly that rather than rounding up.
+    """
     report = analyse(
         {"files": [{"path": "front/app.js", "content": "const x = 1\n"}]}
     ).json()
 
-    assert report["scores"]["performance"]["coverage"] == "not_evaluated"
+    assert report["scores"]["performance"]["coverage"] == "partially_evaluated"
 
 
 def test_what_was_dropped_is_counted():

@@ -120,7 +120,10 @@ CATEGORY_DETECTORS = {
     "security": ("semgrep",),
     "readability": ("metrics_text", "naming"),
     "maintainability": ("metrics_text", "metrics_python", "clones"),
-    "performance": ("metrics_python",),
+    # Semgrep joined this category when the performance rule pack was
+    # written; before that a score of 20 here mostly meant "one detector
+    # looked", which the coverage flag was carrying alone.
+    "performance": ("semgrep", "metrics_python"),
     "best_practices": ("semgrep", "naming"),
 }
 

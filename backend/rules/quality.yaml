@@ -212,3 +212,172 @@ rules:
       - pattern: print(...)
       - pattern: console.log(...)
       - pattern: console.debug(...)
+
+  # ---------------------------------------------------------- PERFORMANCE
+  #
+  # Every rule below describes something that is ACTUALLY slower, not merely
+  # something that looks untidy. Three obvious candidates were written and
+  # then deleted for failing that test:
+  #
+  #   * `len(x)` in a loop condition — len() is O(1) in Python;
+  #   * `open()` inside a loop — iterating over filenames is correct;
+  #   * `x in [1, 2, 3]` — scanning three items beats building a set.
+  #
+  # Flagging those would have produced exactly the class of false positive
+  # this rule pack was rewritten in taint mode to avoid.
+
+  # The highest-value rule here. One query per iteration turns a page that
+  # should make one round trip into one that makes hundreds — the "N+1"
+  # problem, and the usual reason an endpoint is slow in production.
+  - id: query-in-loop
+    languages: [python]
+    severity: WARNING
+    message: "Database or network call inside a loop: one round trip per iteration."
+    metadata:
+      category: performance
+      severity: high
+      penalty: 6
+      suggestion: "Fetch once outside the loop, or use a single bulk query with an IN clause."
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              for $I in $SEQ:
+                  ...
+          - pattern-inside: |
+              while $COND:
+                  ...
+      - pattern-either:
+          - pattern: $OBJ.execute(...)
+          - pattern: $OBJ.query(...)
+          - pattern: $OBJ.fetchall(...)
+          - pattern: $OBJ.fetchone(...)
+          - pattern: $OBJ.get(...).first()
+          - pattern: requests.$METHOD(...)
+          - pattern: httpx.$METHOD(...)
+          - pattern: urllib.request.urlopen(...)
+
+  # Inserting at the front shifts every existing element along.
+  - id: insert-at-front-of-list
+    languages: [python]
+    severity: INFO
+    message: "Inserting at position 0 moves every other element: O(n) per call."
+    metadata:
+      category: performance
+      severity: low
+      penalty: 2
+      suggestion: "collections.deque has appendleft(), which is O(1)."
+    pattern: $LIST.insert(0, ...)
+
+  # Scanning a list is O(n) per test; a set is a hash lookup. Reported as
+  # low severity because it only matters when the collection is large,
+  # which the rule cannot know — the suggestion says so rather than
+  # asserting a problem.
+  - id: membership-test-in-loop
+    languages: [python]
+    severity: INFO
+    message: "Membership test against a list inside a loop: every test scans it."
+    metadata:
+      category: performance
+      severity: low
+      penalty: 2
+      suggestion: "If the collection is large and unchanging, build a set once outside the loop."
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              for $I in $SEQ:
+                  ...
+          - pattern-inside: |
+              while $COND:
+                  ...
+      - pattern: $X in $HAYSTACK
+      - metavariable-pattern:
+          metavariable: $HAYSTACK
+          pattern: $NAME
+      - pattern-not: $X in $A.$B
+      - pattern-not-inside: |
+          for $X in $HAYSTACK:
+              ...
+
+  - id: regex-compiled-in-loop
+    languages: [python]
+    severity: INFO
+    message: "Regular expression compiled inside a loop: rebuilt on every iteration."
+    metadata:
+      category: performance
+      severity: low
+      penalty: 2
+      suggestion: "Compile once outside the loop and reuse the compiled pattern."
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              for $I in $SEQ:
+                  ...
+          - pattern-inside: |
+              while $COND:
+                  ...
+      - pattern: re.compile(...)
+
+  # iterrows() builds a Series per row. On a large frame it is orders of
+  # magnitude slower than a vectorised operation.
+  - id: pandas-row-iteration
+    languages: [python]
+    severity: WARNING
+    message: "Iterating a DataFrame row by row: this is the slow way to use pandas."
+    metadata:
+      category: performance
+      severity: medium
+      penalty: 4
+      suggestion: "Use a vectorised operation, or .apply() where one is not available."
+    pattern-either:
+      - pattern: $DF.iterrows()
+      - pattern: $DF.itertuples()
+
+  # Awaiting in sequence when the calls do not depend on one another turns
+  # parallel work into serial work. Medium rather than high: ordering is
+  # sometimes deliberate, and the suggestion says so.
+  - id: await-in-loop
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Awaited call inside a loop: each iteration waits for the previous one."
+    metadata:
+      category: performance
+      severity: medium
+      penalty: 4
+      suggestion: "If the iterations are independent, collect the promises and await Promise.all once."
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              for (...) { ... }
+          - pattern-inside: |
+              for (const $X of $Y) { ... }
+          - pattern-inside: |
+              for (let $X of $Y) { ... }
+          - pattern-inside: |
+              while (...) { ... }
+      - pattern: await $CALL(...)
+
+  # Querying the DOM is a tree search. Doing it per iteration repeats work
+  # that could be done once.
+  - id: dom-query-in-loop
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "DOM queried inside a loop: the document is searched on every iteration."
+    metadata:
+      category: performance
+      severity: low
+      penalty: 2
+      suggestion: "Query once before the loop and reuse the result."
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              for (...) { ... }
+          - pattern-inside: |
+              for (const $X of $Y) { ... }
+          - pattern-inside: |
+              for (let $X of $Y) { ... }
+          - pattern-inside: |
+              while (...) { ... }
+      - pattern-either:
+          - pattern: document.querySelector(...)
+          - pattern: document.querySelectorAll(...)
+          - pattern: document.getElementById(...)

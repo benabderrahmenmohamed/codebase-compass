@@ -71,6 +71,58 @@ def _nested_loops(tree: ast.AST) -> list[int]:
     return sorted(set(lines))
 
 
+
+def _string_built_in_loop(tree: ast.AST) -> list[int]:
+    """Lines where a STRING is grown by += inside a loop.
+
+    Python strings are immutable, so `s += x` builds a whole new string each
+    time. Over n iterations that copies the accumulated text n times, which
+    is quadratic — the classic reason a report generator that is fine on
+    ten rows takes minutes on ten thousand.
+
+    Semgrep cannot express this rule, because the pattern `$S += $X` is
+    equally a numeric accumulator, which is perfectly fine. What separates
+    them is the TYPE of $S, and that needs the syntax tree: we only report a
+    name that was assigned a string literal somewhere in the same function.
+    Without that check this becomes a false-positive generator, which is the
+    failure mode this rule pack exists to avoid.
+    """
+    found: list[int] = []
+
+    for function in ast.walk(tree):
+        if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        # Names assigned a string literal anywhere in this function.
+        strings: set[str] = set()
+        for node in ast.walk(function):
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+                if isinstance(node.value.value, str):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            strings.add(target.id)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.value, ast.Constant):
+                if isinstance(node.value.value, str) and isinstance(node.target, ast.Name):
+                    strings.add(node.target.id)
+
+        if not strings:
+            continue
+
+        for loop in ast.walk(function):
+            if not isinstance(loop, (ast.For, ast.While, ast.AsyncFor)):
+                continue
+            for node in ast.walk(loop):
+                if (
+                    isinstance(node, ast.AugAssign)
+                    and isinstance(node.op, ast.Add)
+                    and isinstance(node.target, ast.Name)
+                    and node.target.id in strings
+                ):
+                    found.append(node.lineno)
+
+    return sorted(set(found))
+
+
 def measure_text(content: str) -> list[Measurement]:
     """Measurements that work on any language, from the text alone."""
     findings: list[Measurement] = []
@@ -149,6 +201,20 @@ def measure_python(content: str) -> list[Measurement]:
                         penalty=4,
                     )
                 )
+
+    for line in _string_built_in_loop(tree):
+        findings.append(
+            Measurement(
+                line=line,
+                severity="medium",
+                message="String grown with += inside a loop: this copies the whole "
+                "string on every iteration.",
+                suggestion="Collect the pieces in a list and join them once after "
+                "the loop.",
+                category="performance",
+                penalty=4,
+            )
+        )
 
     for line in _nested_loops(tree):
         findings.append(

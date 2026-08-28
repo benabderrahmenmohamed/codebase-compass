@@ -214,11 +214,27 @@ def test_scoring_is_deterministic():
 
 
 def test_a_score_of_twenty_is_not_a_claim_of_coverage():
-    """A JS file gets 20 for performance because nothing measured it."""
-    result = scoring.score_file("front/app.js", 50, [])
+    """A JS file with no scanner gets 20 for performance because nothing
+    measured it, and the coverage flag is what says so.
+
+    semgrep_available is passed explicitly rather than left to the default.
+    The test used to rely on that default and started failing when the
+    performance rule pack gave Semgrep JavaScript rules — it was asserting
+    a coverage gap that had been closed, while appearing to assert the
+    principle. The principle is unchanged; only the scanner's reach moved.
+    """
+    result = scoring.score_file("front/app.js", 50, [], semgrep_available=False)
 
     assert result.scores["performance"].score == 20
     assert result.scores["performance"].coverage == config.COVERAGE_NONE
+
+
+def test_javascript_performance_is_partly_covered_once_semgrep_runs():
+    """The performance rule pack added JavaScript rules, so Semgrep looks;
+    the Python-only AST metrics still do not. Partial, not full."""
+    result = scoring.score_file("front/app.js", 50, [], semgrep_available=True)
+
+    assert result.scores["performance"].coverage == config.COVERAGE_PARTIAL
 
 
 def test_a_python_file_is_fully_covered_when_semgrep_ran():
