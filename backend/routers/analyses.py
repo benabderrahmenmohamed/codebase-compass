@@ -10,7 +10,7 @@ import permissions
 import storage
 from permissions import User
 from routers import security
-from rule_engine import build_analysis
+from analysis import snippet
 from schemas import AnalysisRequest, AnalysisResponse, ErrorResponse
 
 # prefix: every route below starts with /analyses
@@ -32,7 +32,7 @@ def create_analysis(payload: AnalysisRequest, user: User = security.CurrentUser)
     """
     security.require(user, permissions.SUBMIT_SNIPPET)
 
-    analysis = build_analysis(payload.code, payload.language)
+    analysis = snippet.analyse(payload.code, payload.language)
     # Ownership is recorded at creation. Without it, "show me my analyses"
     # has no answer and every report is everybody's.
     analysis["owner"] = user.name

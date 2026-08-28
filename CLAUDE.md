@@ -34,7 +34,7 @@ This keeps cost predictable, output verifiable, and every layer testable offline
 |---|---|---|
 | Frontend | React (**JavaScript, never TypeScript**) + Vite, on `:5173` | `frontend/` |
 | Backend | Python FastAPI + Pydantic v2, on `:8000` | `backend/` (venv inside) |
-| Static analysis | Semgrep with our own 11-rule pack | `backend/rules/quality.yaml` |
+| Static analysis | Semgrep with our own 18-rule pack | `backend/rules/quality.yaml` |
 | LLM layer | `claude-opus-5`, structured output, verified | `backend/analysis/claude_client.py` |
 | MCP server | 6 read-only tools, no filesystem access | `backend/mcp_server/server.py` |
 | Database | SQLite, one JSON document per record | `backend/storage.py` |
@@ -46,15 +46,16 @@ This keeps cost predictable, output verifiable, and every layer testable offline
 backend/
   main.py                    app creation, CORS, include_router
   schemas.py                 Pydantic models = the API contract AND the LLM's output contract
-  storage.py                 SQLite: analyses, projects, users
+  storage.py                 SQLite: analyses, projects, users, notifications
   settings.py                environment: API key, GitHub token, db path
   permissions.py             roles and the permission matrix — pure policy, no HTTP
-  rule_engine.py             LEGACY regex engine, still serving POST /analyses
-  rules/quality.yaml         our Semgrep rules, carrying category/severity/penalty
+  notifications.py           events, channels, delivery status
+  rules/quality.yaml         18 Semgrep rules, carrying category/severity/penalty
   routers/
     analyses.py              snippet mode
     projects.py              folder or GitHub repository, then analysis
     users.py                 roles, /users/me
+    notifications.py         one person's inbox
     security.py              the ONLY file turning a permission decision into 401/403
   analysis/
     ingestion.py             filter, bound and re-validate a submitted project
@@ -68,7 +69,7 @@ backend/
     context.py               skeleton + focus windows, and the explanation cap
     claude_client.py         the only file that calls the Anthropic API
     report.py                assembly, and what could NOT be done
-  tests/                     433 tests, all offline, no API key
+  tests/                     513 tests, all offline, no API key
 frontend/src/
   api.js projectFiles.js github.js     no component knows a server exists
   components/                ProjectPicker, ProjectReport, AnalysisReport
@@ -76,8 +77,9 @@ frontend/src/
 ```
 
 Each file has one job. The seam files exist so a future change touches exactly one file
-— **proven twice now**: the analysis engine was rewritten end to end, and storage moved
-from a dict to SQLite, both without changing a single caller or test.
+— **proven three times now**: the analysis engine was rewritten end to end, storage
+moved from a dict to SQLite, and the legacy snippet engine was deleted and rerouted
+through the real pipeline — none of them changing a single caller or contract test.
 
 ## Conventions
 
@@ -110,7 +112,7 @@ why guests cannot trigger the paid layer at all.
 ```bash
 cd backend && venv/Scripts/activate && uvicorn main:app --reload   # http://localhost:8000/docs
 cd frontend && npm run dev                                        # http://localhost:5173
-cd backend && venv/Scripts/python.exe -m pytest -q                 # 433 tests
+cd backend && venv/Scripts/python.exe -m pytest -q                 # 513 tests
 cd frontend && npm test                                            # 92 tests
 ```
 
@@ -119,12 +121,12 @@ cd frontend && npm test                                            # 92 tests
 | Deliverable | State |
 |---|---|
 | Endpoints list with expected responses | done — Pydantic → `/docs` → `/openapi.json` |
-| E2E testing | done — 525 tests, all offline |
+| E2E testing | done — 605 tests, all offline |
 | Vulnerability analysis | done — no ZIP, no URL fetch, SSRF defence, path re-validation |
 | Scoring system | done — worst-finding + density, A–E, coverage flags |
 | Data structure | done — SQLite |
 | Roles / permissions | done — 4 roles, matrix enforced at the router |
-| **Notifications list** | **next** |
+| Notifications list | done — 3 events, 4 channels, published at `/notifications/events` |
 | Cahier des charges · functionality list · flows | not written |
 
 ## How to work with me
