@@ -48,3 +48,26 @@ def github_token() -> str | None:
     """
     token = os.environ.get("GITHUB_TOKEN")
     return token or None
+
+
+def jwt_secret() -> str | None:
+    """The key that signs and verifies tokens, or None.
+
+    There is deliberately no default. A hardcoded development secret is the
+    most-copied security bug in web tutorials: it reaches production, and
+    anybody who has read the source can mint an administrator token. Better
+    to refuse to issue tokens at all than to issue forgeable ones.
+
+    Generate one with:
+
+        python -c "import secrets; print(secrets.token_urlsafe(48))"
+
+    Changing it invalidates every token already issued, which is the only
+    way to revoke them all at once.
+    """
+    secret = os.environ.get("COMPASS_JWT_SECRET")
+    return secret or None
+
+
+def has_jwt_secret() -> bool:
+    return jwt_secret() is not None

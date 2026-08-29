@@ -68,8 +68,12 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 
 CREATE TABLE IF NOT EXISTS users (
-    name        TEXT PRIMARY KEY,
-    role        TEXT NOT NULL
+    name          TEXT PRIMARY KEY,
+    role          TEXT NOT NULL,
+    -- Nullable on purpose. An account may exist before a password is set,
+    -- and such an account simply cannot log in. Storing an empty string
+    -- instead would risk something treating it as a hash to compare.
+    password_hash TEXT
 );
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -222,22 +226,45 @@ def get_project_by_id(project_id: str) -> dict | None:
 # --------------------------------------------------------------------------
 
 
-def save_user(name: str, role: str) -> dict:
-    """Create or update a user, and return it."""
+def save_user(name: str, role: str, password_hash: str | None = None) -> dict:
+    """Create or update a user, and return it (without the hash).
+
+    Passing password_hash=None on an EXISTING user keeps the stored one.
+    INSERT OR REPLACE would otherwise erase a password every time an
+    administrator changed somebody's role — an account silently unable to
+    log in, with nothing in the logs to say why.
+    """
+    existing = get_user(name)
+    if password_hash is None and existing is not None:
+        password_hash = existing.get("password_hash")
+
     with _connect() as connection:
         connection.execute(
-            "INSERT OR REPLACE INTO users (name, role) VALUES (?, ?)", (name, role)
+            "INSERT OR REPLACE INTO users (name, role, password_hash) VALUES (?, ?, ?)",
+            (name, role, password_hash),
         )
     return {"name": name, "role": role}
 
 
 def get_user(name: str) -> dict | None:
-    """Look up a user by name. Returns None if unknown."""
+    """Look up a user by name, INCLUDING the password hash.
+
+    The hash is returned because the login path needs it. It must never
+    reach a response: the UserOut model has no such field, so
+    response_model filters it out — the same mechanism that keeps
+    submitted file contents out of a project response.
+    """
     with _connect() as connection:
         row = connection.execute(
-            "SELECT name, role FROM users WHERE name = ?", (name,)
+            "SELECT name, role, password_hash FROM users WHERE name = ?", (name,)
         ).fetchone()
-    return {"name": row["name"], "role": row["role"]} if row else None
+    if row is None:
+        return None
+    return {
+        "name": row["name"],
+        "role": row["role"],
+        "password_hash": row["password_hash"],
+    }
 
 
 def get_all_users() -> list[dict]:

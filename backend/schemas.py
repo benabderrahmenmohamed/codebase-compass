@@ -484,6 +484,14 @@ class UserIn(BaseModel):
 
     name: str = Field(min_length=1, max_length=60)
     role: str = Field(description="guest | developer | lead | admin")
+    password: str | None = Field(
+        default=None,
+        description=(
+            "Optional. An account without one exists but cannot log in, "
+            "which is useful for creating a user before handing over a "
+            "password out of band."
+        ),
+    )
 
     @field_validator("name")
     @classmethod
@@ -538,3 +546,31 @@ class NotificationOut(BaseModel):
 
 class UnreadCount(BaseModel):
     unread: int = Field(ge=0)
+
+
+class LoginRequest(BaseModel):
+    """Credentials offered at /auth/login."""
+
+    model_config = ConfigDict(
+        json_schema_extra={"examples": [{"name": "alice", "password": "a long passphrase"}]}
+    )
+
+    name: str = Field(min_length=1, max_length=60)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class TokenResponse(BaseModel):
+    """A successful login.
+
+    The role and permissions are returned alongside the token so a client
+    can render the interface it is allowed to use without decoding the JWT
+    itself — decoding it client-side invites treating unverified claims as
+    authoritative.
+    """
+
+    access_token: str
+    token_type: str = Field(default="bearer")
+    expires_in: int = Field(description="Seconds until the token expires")
+    name: str
+    role: str
+    permissions: list[str]

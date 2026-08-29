@@ -92,6 +92,15 @@ def offline_and_free():
         database = tempfile.mkdtemp(prefix="compass-tests-") + "/test.db"
         patch.setenv("COMPASS_DB", database)
 
+        # A signing secret for the suite. Long enough to satisfy the
+        # 32-byte minimum RFC 7518 requires for HS256 — the same check
+        # the application enforces, so the tests cannot pass with a key
+        # that production would refuse.
+        patch.setenv(
+            "COMPASS_JWT_SECRET",
+            "test-only-signing-secret-never-used-outside-the-suite-0123456789",
+        )
+
         yield
 
         shutil.rmtree(Path(database).parent, ignore_errors=True)

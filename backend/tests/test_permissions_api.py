@@ -7,8 +7,10 @@ and assert that the rules actually bite.
 import pytest
 from fastapi.testclient import TestClient
 
+import passwords
 import permissions
 import storage
+import tokens
 from main import app
 
 client = TestClient(app)
@@ -17,19 +19,38 @@ SNIPPET = {"code": "x = 1\n", "language": "python"}
 PROJECT = {"files": [{"path": "a.py", "content": "x = 1\n"}]}
 
 
+PASSWORD = "a-long-enough-test-passphrase"
+
+
 @pytest.fixture(autouse=True)
 def people():
     storage.clear()
-    storage.save_user("alice", permissions.DEVELOPER)
-    storage.save_user("bob", permissions.DEVELOPER)
-    storage.save_user("carol", permissions.LEAD)
-    storage.save_user("root", permissions.ADMIN)
+    digest = passwords.hash_password(PASSWORD)
+    storage.save_user("alice", permissions.DEVELOPER, digest)
+    storage.save_user("bob", permissions.DEVELOPER, digest)
+    storage.save_user("carol", permissions.LEAD, digest)
+    storage.save_user("root", permissions.ADMIN, digest)
     yield
     storage.clear()
 
 
 def as_user(name):
-    return {"X-User": name} if name else {}
+    """A real bearer token for this user.
+
+    The X-User header this used to send no longer authenticates anything:
+    claiming a name is not proving one. Tokens are minted directly rather
+    than by calling /auth/login, because Argon2 is deliberately slow and
+    these tests are about authorisation, not about the login flow —
+    test_auth.py exercises that.
+    """
+    if not name:
+        return {}
+    record = storage.get_user(name)
+    if record is None:
+        # An unknown name: issue a token for it anyway, so the "unknown
+        # user" path can still be tested.
+        return {"Authorization": f"Bearer {tokens.issue(name, permissions.DEVELOPER)}"}
+    return {"Authorization": f"Bearer {tokens.issue(record['name'], record['role'])}"}
 
 
 # --------------------------------------------------------------------------
@@ -50,11 +71,16 @@ def test_a_known_name_gets_its_role():
     assert (body["name"], body["role"]) == ("carol", permissions.LEAD)
 
 
-def test_an_unknown_name_falls_back_to_guest_rather_than_erroring():
-    """There is no registration in this build, so refusing unknown names
-    would make the API unusable before any user exists."""
-    body = client.get("/users/me", headers=as_user("nobody")).json()
-    assert body["role"] == permissions.GUEST
+def test_a_token_for_a_deleted_account_is_rejected():
+    """This used to assert that an unknown name fell back to guest, which
+    was right when a name was merely claimed. A SIGNED token naming an
+    account that no longer exists is different: deleting a user is the
+    action taken when someone leaves or is compromised, and it has to take
+    effect immediately rather than when their token happens to expire."""
+    response = client.get("/users/me", headers=as_user("nobody"))
+
+    assert response.status_code == 401
+    assert "revoked" in response.headers.get("www-authenticate", "")
 
 
 def test_whoami_lists_what_the_role_may_do():
@@ -248,24 +274,59 @@ def test_an_admin_cannot_remove_themselves():
 # --------------------------------------------------------------------------
 
 
-def test_the_bootstrap_name_can_create_the_first_admin(monkeypatch):
+BOOTSTRAP = "a-long-enough-bootstrap-secret"
+
+
+def test_the_bootstrap_secret_can_create_the_first_admin(monkeypatch):
     storage.clear()
-    monkeypatch.setenv("COMPASS_BOOTSTRAP_ADMIN", "founder")
+    monkeypatch.setenv("COMPASS_BOOTSTRAP_TOKEN", BOOTSTRAP)
 
     response = client.post(
-        "/users", json={"name": "root", "role": "admin"}, headers=as_user("founder")
+        "/users",
+        json={"name": "root", "role": "admin"},
+        headers={"X-Bootstrap-Token": BOOTSTRAP},
     )
 
     assert response.status_code == 201
 
 
+def test_a_wrong_bootstrap_secret_is_refused(monkeypatch):
+    storage.clear()
+    monkeypatch.setenv("COMPASS_BOOTSTRAP_TOKEN", BOOTSTRAP)
+
+    response = client.post(
+        "/users",
+        json={"name": "root", "role": "admin"},
+        headers={"X-Bootstrap-Token": "not-the-secret-at-all"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_a_short_bootstrap_secret_is_treated_as_none(monkeypatch):
+    """Failing closed beats accepting a four-character token somebody set
+    'just for testing'."""
+    storage.clear()
+    monkeypatch.setenv("COMPASS_BOOTSTRAP_TOKEN", "short")
+
+    response = client.post(
+        "/users",
+        json={"name": "root", "role": "admin"},
+        headers={"X-Bootstrap-Token": "short"},
+    )
+
+    assert response.status_code == 403
+
+
 def test_the_bootstrap_stops_working_once_a_user_exists(monkeypatch):
     """Self-closing, so it cannot be left switched on by accident."""
-    monkeypatch.setenv("COMPASS_BOOTSTRAP_ADMIN", "founder")
+    monkeypatch.setenv("COMPASS_BOOTSTRAP_TOKEN", BOOTSTRAP)
 
     # The `people` fixture already created users.
     response = client.post(
-        "/users", json={"name": "x", "role": "admin"}, headers=as_user("founder")
+        "/users",
+        json={"name": "x", "role": "admin"},
+        headers={"X-Bootstrap-Token": BOOTSTRAP},
     )
 
     assert response.status_code == 403
@@ -273,10 +334,12 @@ def test_the_bootstrap_stops_working_once_a_user_exists(monkeypatch):
 
 def test_without_the_variable_there_is_no_bootstrap(monkeypatch):
     storage.clear()
-    monkeypatch.delenv("COMPASS_BOOTSTRAP_ADMIN", raising=False)
+    monkeypatch.delenv("COMPASS_BOOTSTRAP_TOKEN", raising=False)
 
     response = client.post(
-        "/users", json={"name": "root", "role": "admin"}, headers=as_user("founder")
+        "/users",
+        json={"name": "root", "role": "admin"},
+        headers={"X-Bootstrap-Token": BOOTSTRAP},
     )
 
     assert response.status_code == 403

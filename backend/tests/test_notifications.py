@@ -15,8 +15,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 import notifications
+import passwords
 import permissions
 import storage
+import tokens
 from main import app
 
 client = TestClient(app)
@@ -40,15 +42,18 @@ UNSAFE = {
 def clean(monkeypatch):
     monkeypatch.delenv("COMPASS_SMTP_HOST", raising=False)
     storage.clear()
-    storage.save_user("alice", permissions.DEVELOPER)
-    storage.save_user("bob", permissions.DEVELOPER)
-    storage.save_user("carol", permissions.LEAD)
+    digest = passwords.hash_password("a-long-enough-test-passphrase")
+    storage.save_user("alice", permissions.DEVELOPER, digest)
+    storage.save_user("bob", permissions.DEVELOPER, digest)
+    storage.save_user("carol", permissions.LEAD, digest)
     yield
     storage.clear()
 
 
 def as_user(name):
-    return {"X-User": name}
+    """A real bearer token: claiming a name no longer proves one."""
+    record = storage.get_user(name)
+    return {"Authorization": f"Bearer {tokens.issue(record['name'], record['role'])}"}
 
 
 def a_report(**overrides):

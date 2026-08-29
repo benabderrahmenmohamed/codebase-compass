@@ -24,6 +24,16 @@ python-dotenv==1.2.2
 # --- MCP server --------------------------------------------------------
 mcp==1.23.3
 
+# --- Authentication ----------------------------------------------------
+# argon2-cffi: OWASP's first recommendation for password hashing. bcrypt was
+# rejected because it silently truncates at 72 bytes, so two different long
+# passwords sharing a prefix become the same password with nothing warning.
+#
+# PyJWT is pinned to the range semgrep requires. Installing 2.10 first broke
+# semgrep's own dependency, which `pip check` caught immediately.
+argon2-cffi==25.1.0
+PyJWT[crypto]==2.13.0
+
 # --- GitHub source -----------------------------------------------------
 # Already arrived transitively, which is exactly how the pywin32 mistake
 # happened: listed here because analysis/github_source.py imports it.
