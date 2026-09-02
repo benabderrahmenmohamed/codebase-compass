@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ProjectReport from '../components/ProjectReport'
+import { incompleteBecause } from '../reportText'
 
 // The rule this component exists to obey:
 //   an empty section must always state its CAUSE.
@@ -165,5 +166,87 @@ describe('ProjectReport', () => {
     )
     expect(screen.getByText('The session expiry timestamp.')).toBeInTheDocument()
     expect(screen.getByText('expires_at')).toBeInTheDocument()
+  })
+})
+
+// --------------------------------------------------------------------------
+// "This analysis is incomplete." with nothing after it
+//
+// Found by running the tool on a real repository: 481 findings were dropped
+// past the cap, so the report was incomplete for a reason the warning had no
+// clause for, and it rendered as a bare sentence. That is exactly the failure
+// this project exists to avoid — a partial result that does not say what is
+// missing.
+// --------------------------------------------------------------------------
+
+describe('the incomplete-analysis warning', () => {
+  it('never appears without a reason', () => {
+    // Incomplete, but for a cause the old warning did not cover.
+    const report = makeReport({ analysis_complete: false, findings_dropped: 481 })
+    const { container } = render(<ProjectReport report={report} />)
+
+    const warning = container.querySelector('.warning')
+    expect(warning).toBeInTheDocument()
+    expect(warning.textContent).toContain('481')
+    expect(warning.textContent.length).toBeGreaterThan(60)
+  })
+
+  it('names the finding cap', () => {
+    expect(incompleteBecause({ findings_dropped: 481 }).join(' ')).toMatch(
+      /481 findings beyond the reporting cap/
+    )
+  })
+
+  it('names a missing scanner', () => {
+    const causes = incompleteBecause({
+      semgrep_available: false,
+      semgrep_reason: 'semgrep_missing',
+    })
+    expect(causes.join(' ')).toMatch(/security scanner did not run \(semgrep_missing\)/)
+  })
+
+  it('names dropped code windows', () => {
+    expect(incompleteBecause({ context_windows_dropped: 30 }).join(' ')).toMatch(
+      /30 lower-severity code windows/
+    )
+  })
+
+  it('names findings left unexplained', () => {
+    expect(incompleteBecause({ findings_not_explained: 85 }).join(' ')).toMatch(
+      /85 findings were listed without a written explanation/
+    )
+  })
+
+  it('lists every cause when several apply at once', () => {
+    const causes = incompleteBecause({
+      semgrep_available: false,
+      semgrep_reason: 'timeout',
+      findings_dropped: 12,
+      context_windows_dropped: 3,
+    })
+    expect(causes).toHaveLength(3)
+  })
+
+  // The guard. Without it, a future cause nobody has named here brings back
+  // the exact bug this block was written to fix.
+  it('says something honest even for a cause it cannot name', () => {
+    // Everything this function knows how to name is fine, and the report
+    // is still marked incomplete. That is the case that used to render as
+    // a bare sentence.
+    const causes = incompleteBecause({
+      semgrep_available: true,
+      findings_dropped: 0,
+      context_windows_dropped: 0,
+      findings_not_explained: 0,
+      analysis_complete: false,
+    })
+
+    expect(causes).toHaveLength(1)
+    expect(causes[0]).toMatch(/does not yet name which one/)
+  })
+
+  it('stays quiet when the analysis is complete', () => {
+    const { container } = render(<ProjectReport report={makeReport()} />)
+    expect(container.querySelector('.warning')).toBeNull()
   })
 })

@@ -341,3 +341,48 @@ def test_a_full_path_beats_a_shortened_one():
     built = skeleton.build(contents)
 
     assert built.imports_graph["main.py"] == ["config.py"]
+
+
+def test_the_shallowest_module_wins_because_python_resolves_that_way():
+    """`import notifications` with the root on the path finds the top-level
+    module, not the one inside a package. The nested one is reachable only
+    as `routers.notifications`.
+
+    Found by reading the tool's own output on its own repository: both files
+    exist, the name was treated as ambiguous, and `notifications` was
+    reported to the user as a third-party dependency next to fastapi.
+    """
+    contents = {
+        "main.py": "import notifications\n",
+        "notifications.py": "def send():\n    pass\n",
+        "routers/notifications.py": "def inbox():\n    pass\n",
+    }
+    built = skeleton.build(contents)
+
+    assert built.imports_graph["main.py"] == ["notifications.py"]
+    assert "notifications" not in built.external_dependencies
+
+
+def test_the_nested_module_is_still_reachable_by_its_full_name():
+    contents = {
+        "main.py": "from routers import notifications\n",
+        "notifications.py": "def send():\n    pass\n",
+        "routers/notifications.py": "def inbox():\n    pass\n",
+    }
+    built = skeleton.build(contents)
+
+    assert built.imports_graph["main.py"] == ["routers/notifications.py"]
+
+
+def test_a_genuine_tie_at_the_same_depth_is_still_left_unresolved():
+    """Two files equally deep give no reason to prefer either. An
+    unresolved import is visible; a wrong edge in the graph is not."""
+    contents = {
+        "main.py": "import util\n",
+        "a/util.py": "x = 1\n",
+        "b/util.py": "y = 2\n",
+    }
+    built = skeleton.build(contents)
+
+    assert built.imports_graph["main.py"] == []
+    assert "util" in built.external_dependencies

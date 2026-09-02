@@ -6,6 +6,8 @@
 //   2. Anything missing says WHY it is missing. An absent section that
 //      looks like an empty one is worse than no section at all.
 
+import { incompleteBecause } from '../reportText'
+
 const LABELS = {
   security: 'Security',
   readability: 'Readability',
@@ -45,11 +47,8 @@ function ProjectReport({ report }) {
 
       {!report.analysis_complete && (
         <p className="warning">
-          This analysis is incomplete.
-          {!report.semgrep_available &&
-            ` The security scanner did not run (${report.semgrep_reason}), so security findings are missing — not absent.`}
-          {report.context_windows_dropped > 0 &&
-            ` ${report.context_windows_dropped} lower-severity code windows were omitted to stay within budget.`}
+          <strong>This analysis is incomplete.</strong>{' '}
+          {incompleteBecause(report).join(' ')}
         </p>
       )}
 

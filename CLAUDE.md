@@ -49,9 +49,12 @@ backend/
   storage.py                 SQLite: analyses, projects, users, notifications
   settings.py                environment: API key, GitHub token, db path
   permissions.py             roles and the permission matrix — pure policy, no HTTP
+  passwords.py               Argon2id hashing, timing equalisation
+  tokens.py                  JWT issue/verify, algorithm pinned
   notifications.py           events, channels, delivery status
   rules/quality.yaml         18 Semgrep rules, carrying category/severity/penalty
   routers/
+    auth.py                  POST /auth/login
     analyses.py              snippet mode
     projects.py              folder or GitHub repository, then analysis
     users.py                 roles, /users/me
@@ -69,11 +72,12 @@ backend/
     context.py               skeleton + focus windows, and the explanation cap
     claude_client.py         the only file that calls the Anthropic API
     report.py                assembly, and what could NOT be done
-  tests/                     513 tests, all offline, no API key
+  tests/                     561 tests, all offline, no API key
 frontend/src/
   api.js projectFiles.js github.js     no component knows a server exists
-  components/                ProjectPicker, ProjectReport, AnalysisReport
-  tests/                     92 tests, offline (fetch is stubbed to throw)
+  session.js reportText.js            token storage; degradation wording
+  components/                ProjectPicker, ProjectReport, AnalysisReport, SignIn
+  tests/                     118 tests, offline (fetch is stubbed to throw)
 ```
 
 Each file has one job. The seam files exist so a future change touches exactly one file
@@ -112,8 +116,8 @@ why guests cannot trigger the paid layer at all.
 ```bash
 cd backend && venv/Scripts/activate && uvicorn main:app --reload   # http://localhost:8000/docs
 cd frontend && npm run dev                                        # http://localhost:5173
-cd backend && venv/Scripts/python.exe -m pytest -q                 # 513 tests
-cd frontend && npm test                                            # 92 tests
+cd backend && venv/Scripts/python.exe -m pytest -q                 # 561 tests
+cd frontend && npm test                                            # 118 tests
 ```
 
 ## Deliverables from the encadreur
@@ -121,11 +125,11 @@ cd frontend && npm test                                            # 92 tests
 | Deliverable | State |
 |---|---|
 | Endpoints list with expected responses | done — Pydantic → `/docs` → `/openapi.json` |
-| E2E testing | done — 605 tests, all offline |
+| E2E testing | done — 679 tests, all offline |
 | Vulnerability analysis | done — no ZIP, no URL fetch, SSRF defence, path re-validation |
 | Scoring system | done — worst-finding + density, A–E, coverage flags |
 | Data structure | done — SQLite |
-| Roles / permissions | done — 4 roles, matrix enforced at the router |
+| Roles / permissions | done — 4 roles + JWT login, matrix enforced at the router |
 | Notifications list | done — 3 events, 4 channels, published at `/notifications/events` |
 | Cahier des charges · functionality list · flows | not written |
 

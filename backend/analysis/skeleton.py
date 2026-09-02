@@ -335,11 +335,24 @@ def python_module_map(files) -> dict[str, str]:
     So shorter names are registered as well: `backend.analysis.skeleton`
     also answers to `analysis.skeleton` and to `skeleton`.
 
-    A shortened name is registered ONLY when exactly one file claims it.
-    Two `util.py` in different folders leave `util` unregistered, so the
-    import stays unresolved instead of being attached to whichever file
-    happened to be parsed first. An unresolved import is visible; a
-    confidently wrong edge in the graph is not.
+    When two files claim the same shortened name, the SHALLOWEST wins —
+    because that is what Python itself does. With `backend/` on the path,
+    `import notifications` finds `backend/notifications.py`, not
+    `backend/routers/notifications.py`; the second is only reachable as
+    `routers.notifications`. Preferring depth is not a tie-break heuristic,
+    it is the actual import rule.
+
+    Only a genuine tie — two files at the same depth, such as
+    `a/util.py` and `b/util.py` — is left unregistered, so the import
+    stays unresolved rather than being attached to whichever file happened
+    to be parsed first. An unresolved import is visible; a confidently
+    wrong edge in the graph is not.
+
+    An earlier version stopped at "ambiguous, give up", which was safe and
+    still wrong in its consequence: `notifications` went unresolved and was
+    then reported to the user as a third-party dependency, alongside fastapi
+    and pydantic. Found by reading the tool's own output on its own
+    repository.
     """
     full: dict[str, str] = {}
     claims: dict[str, set[str]] = {}
@@ -356,8 +369,17 @@ def python_module_map(files) -> dict[str, str]:
     # A full path always wins over a shortened one.
     resolved = dict(full)
     for name, paths in claims.items():
-        if name not in resolved and len(paths) == 1:
-            resolved[name] = next(iter(paths))
+        if name in resolved:
+            continue
+
+        by_depth: dict[int, list[str]] = {}
+        for path in paths:
+            by_depth.setdefault(path.count("/"), []).append(path)
+
+        shallowest = by_depth[min(by_depth)]
+        if len(shallowest) == 1:
+            resolved[name] = shallowest[0]
+
     return resolved
 
 

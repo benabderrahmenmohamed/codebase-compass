@@ -1,12 +1,28 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { analyseProject, analyzeCode, submitProject } from './api'
 import AnalysisReport from './components/AnalysisReport'
 import ProjectPicker from './components/ProjectPicker'
 import ProjectReport from './components/ProjectReport'
+import SignIn from './components/SignIn'
+import { getUser } from './session'
 import './App.css'
 
 function App() {
   const [mode, setMode] = useState('project')
+
+  // Read from local storage rather than decoded from the token: these are
+  // the claims the SERVER returned at login, not ones this client verified
+  // for itself. Used only to render the interface.
+  const [user, setUser] = useState(getUser)
+  const refreshUser = useCallback(() => setUser(getUser()), [])
+
+  // A request that meets a 401 signs the session out inside api.js, so the
+  // header has to notice. Cheap, and it keeps the two in step without a
+  // state library.
+  useEffect(() => {
+    const id = setInterval(refreshUser, 2000)
+    return () => clearInterval(id)
+  }, [refreshUser])
 
   // Snippet mode
   const [code, setCode] = useState('')
@@ -52,7 +68,11 @@ function App() {
       // call that reports what was found before anything is analysed.
       const submitted = await submitProject(source, name)
       setManifest(submitted)
-      setProjectReport(await analyseProject(submitted.project_id))
+      // A guest cannot trigger the paid layer, so asking for it would only
+      // produce a report that says the explanations are missing. Asking
+      // honestly is cheaper and clearer than being refused.
+      const mayUseLlm = Boolean(user && user.permissions.includes('use_llm'))
+      setProjectReport(await analyseProject(submitted.project_id, mayUseLlm))
     } catch (e) {
       setError(e.message)
     } finally {
@@ -63,6 +83,7 @@ function App() {
   return (
     <main className="app">
       <header className="masthead">
+        <SignIn user={user} onChange={refreshUser} />
         <h1>Codebase Compass</h1>
         <p className="tagline">
           Static analysis and AI review for Python and JavaScript projects —
